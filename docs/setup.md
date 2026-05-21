@@ -27,7 +27,7 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your Supabase credentials
 
-# Start backend
+# Start backend (use port 8002 if 8000 has orphaned sockets)
 uvicorn app.main:app --reload --port 8000
 ```
 
@@ -40,6 +40,7 @@ npm install
 # Configure environment
 cp .env.local.example .env.local
 # Edit .env.local with your Supabase credentials
+# NEXT_PUBLIC_API_URL must match the backend port (default http://localhost:8000)
 
 # Start frontend
 npm run dev
