@@ -11,9 +11,15 @@ from app.services.upload import get_parquet_path
 from app.engine.visualization import query_chart_data
 from app.config import settings
 
+from pydantic import BaseModel
+
 router = APIRouter(prefix="/api/v1", tags=["dashboards"])
 
 SUPABASE_REST_URL = settings.supabase_url.rstrip("/") + "/rest/v1"
+
+
+class ReorderRequest(BaseModel):
+    chart_ids: list[str]
 
 
 def _rest_headers():
@@ -362,4 +368,22 @@ def delete_chart(
         raise HTTPException(status_code=404, detail="Dashboard not found")
 
     supabase.table("chart_specs").delete().eq("id", chart_id).eq("dashboard_id", dashboard_id).execute()
+    return {"status": "success"}
+
+
+@router.put("/dashboards/{dashboard_id}/charts/reorder")
+def reorder_charts(
+    dashboard_id: str,
+    request: ReorderRequest,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    now = datetime.utcnow().isoformat()
+    for idx, chart_id in enumerate(request.chart_ids):
+        supabase.table("chart_specs").update({"order": idx, "updated_at": now}).eq("id", chart_id).eq("dashboard_id", dashboard_id).execute()
+
     return {"status": "success"}

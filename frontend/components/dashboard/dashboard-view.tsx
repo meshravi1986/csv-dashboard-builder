@@ -1,8 +1,26 @@
 "use client";
 
+import { useEffect, useState, useCallback } from "react";
 import { ChartCard } from "./chart-card";
 import type { ChartSpec } from "@/types";
 import { api } from "@/services/api";
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  useSortable,
+  verticalListSortingStrategy,
+} from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface DashboardViewProps {
   dashboard: {
@@ -14,47 +32,102 @@ interface DashboardViewProps {
   onRefresh?: () => void;
 }
 
-export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
-  const kpiCards = dashboard.charts.filter((c) => c.chart_type === "kpi");
-  const otherCharts = dashboard.charts.filter((c) => c.chart_type !== "kpi");
-  const fullWidthCharts = otherCharts.filter((c) => c.width === "full");
-  const halfWidthCharts = otherCharts.filter((c) => c.width === "half");
+function SortableChartCard({ chart, onDelete }: { chart: ChartSpec; onDelete: (id: string) => void }) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: chart.id });
 
-  const handleDeleteChart = async (chartId: string) => {
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div ref={setNodeRef} style={style}>
+      <div className="relative group">
+        <div
+          {...attributes}
+          {...listeners}
+          className="absolute left-2 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1.5 rounded-lg hover:bg-slate-100"
+        >
+          <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
+          </svg>
+        </div>
+        <ChartCard chart={chart} onDelete={onDelete} />
+      </div>
+    </div>
+  );
+}
+
+export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
+  const [charts, setCharts] = useState<ChartSpec[]>(dashboard.charts);
+
+  useEffect(() => {
+    setCharts(dashboard.charts);
+  }, [dashboard.charts]);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+  );
+
+  const sortedCharts = [...charts].sort((a, b) => a.order - b.order);
+
+  const handleDeleteChart = useCallback(async (chartId: string) => {
     if (!dashboard.id) return;
     if (!confirm("Remove this chart from the dashboard?")) return;
     try {
       await api.deleteChart(dashboard.id, chartId);
+      setCharts((prev) => prev.filter((c) => c.id !== chartId));
       if (onRefresh) onRefresh();
     } catch (err) {
       console.error(err);
     }
+  }, [dashboard.id, onRefresh]);
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = sortedCharts.findIndex((c) => c.id === active.id);
+    const newIndex = sortedCharts.findIndex((c) => c.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(sortedCharts, oldIndex, newIndex);
+    const updated = reordered.map((c, i) => ({ ...c, order: i }));
+    setCharts(updated);
+
+    if (dashboard.id) {
+      try {
+        await api.reorderCharts(dashboard.id, updated.map((c) => c.id));
+      } catch (err) {
+        console.error(err);
+      }
+    }
   };
 
   return (
-    <div className="space-y-4">
-      {kpiCards.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-          {kpiCards.map((chart) => (
-            <ChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
-          ))}
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+      <SortableContext items={sortedCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        <div className="space-y-4">
+          {sortedCharts.length === 0 ? (
+            <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
+              <p className="text-sm text-slate-400">No charts generated</p>
+            </div>
+          ) : (
+            sortedCharts.map((chart) => (
+              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
+            ))
+          )}
         </div>
-      )}
-      {fullWidthCharts.map((chart) => (
-        <ChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
-      ))}
-      {halfWidthCharts.length > 0 && (
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
-          {halfWidthCharts.map((chart) => (
-            <ChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
-          ))}
-        </div>
-      )}
-      {dashboard.charts.length === 0 && (
-        <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
-          <p className="text-sm text-slate-400">No charts generated</p>
-        </div>
-      )}
-    </div>
+      </SortableContext>
+    </DndContext>
   );
 }

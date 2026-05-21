@@ -264,6 +264,17 @@ class ApiService {
     return res.json();
   }
 
+  async reorderCharts(dashboardId: string, chartIds: string[]) {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/reorder`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ chart_ids: chartIds }),
+    });
+    if (!res.ok) throw new Error("Reorder failed");
+    return res.json();
+  }
+
   async deleteDashboard(id: string) {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/dashboards/${id}`, {
