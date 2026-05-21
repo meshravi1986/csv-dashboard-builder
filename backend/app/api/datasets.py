@@ -6,6 +6,10 @@ from app.schemas.api import (
     SemanticUpdateRequest,
     SemanticSuggestResponse,
     SemanticField,
+    SuggestSQLRequest,
+    SuggestSQLResponse,
+    PreviewSQLRequest,
+    PreviewSQLResponse,
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
@@ -106,6 +110,48 @@ def update_semantics(
     return {"status": "success"}
 
 
+@router.post("/{dataset_id}/metrics/suggest-sql", response_model=SuggestSQLResponse)
+def suggest_metric_sql(
+    dataset_id: str,
+    request: SuggestSQLRequest,
+    user: dict = Depends(get_current_user),
+):
+    from app.services.metric_sql import suggest_sql
+
+    dataset = get_dataset(dataset_id, user["id"])
+    parquet_path = get_parquet_path(dataset["parquet_path"])
+    profile = profile_dataset(parquet_path)
+    sql = suggest_sql(profile, request.description)
+    if not sql:
+        raise HTTPException(status_code=500, detail="Failed to generate SQL")
+    return {"sql": sql}
+
+
+@router.post("/{dataset_id}/metrics/preview-sql", response_model=PreviewSQLResponse)
+def preview_metric_sql(
+    dataset_id: str,
+    request: PreviewSQLRequest,
+    user: dict = Depends(get_current_user),
+):
+    from app.utils.duckdb import get_duckdb
+
+    dataset = get_dataset(dataset_id, user["id"])
+    parquet_path = get_parquet_path(dataset["parquet_path"])
+
+    try:
+        with get_duckdb() as conn:
+            sql = request.sql.strip()
+            if sql.upper().startswith("SELECT"):
+                result = conn.execute(sql).fetchone()
+            else:
+                sql = f"SELECT {sql} as value FROM '{parquet_path}'"
+                result = conn.execute(sql).fetchone()
+            val = float(result[0]) if result and result[0] is not None else None
+            return {"value": val, "error": None}
+    except Exception as e:
+        return {"value": None, "error": str(e)}
+
+
 @router.get("/{dataset_id}/metrics")
 def get_metrics(
     dataset_id: str,
@@ -125,13 +171,6 @@ def create_metric(
 ):
     dataset = get_dataset(dataset_id, user["id"])
     supabase = get_supabase()
-
-    import sys
-    print(f"CREATE METRIC: name={metric.name}, formula={metric.formula!r}, field_name={metric.field_name!r}, aggregation={metric.aggregation!r}", flush=True)
-    with open("D:\\Ravi\\Python Projects\\Open Code\\csv-dashboard-builder\\backend\\create_metric_debug.log", "a") as f:
-        f.write(f"CREATE METRIC: name={metric.name}, formula={metric.formula!r}, field_name={metric.field_name!r}, aggregation={metric.aggregation!r}\n")
-        f.write(f"Full payload being inserted: name={metric.name}, formula={metric.formula!r}, field_name={metric.field_name!r}\n")
-        f.flush()
 
     metric_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()

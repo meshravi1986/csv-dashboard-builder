@@ -154,3 +154,20 @@ class DatasetResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     detail: str
+
+
+class SuggestSQLRequest(BaseModel):
+    description: str
+
+
+class SuggestSQLResponse(BaseModel):
+    sql: str
+
+
+class PreviewSQLRequest(BaseModel):
+    sql: str
+
+
+class PreviewSQLResponse(BaseModel):
+    value: Optional[Any] = None
+    error: Optional[str] = None

@@ -132,6 +132,28 @@ class ApiService {
     return res.json();
   }
 
+  async suggestSQL(datasetId: string, description: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/suggest-sql`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ description }),
+    });
+    if (!res.ok) throw new Error("SQL suggestion failed");
+    return res.json();
+  }
+
+  async previewSQL(datasetId: string, sql: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/preview-sql`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ sql }),
+    });
+    if (!res.ok) throw new Error("SQL preview failed");
+    return res.json();
+  }
+
   async deleteMetric(datasetId: string, metricId: string) {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/${metricId}`, {

@@ -17,7 +17,14 @@ export default function MetricsPage() {
   const [loading, setLoading] = useState(true);
   const [creating, setCreating] = useState(false);
   const [showForm, setShowForm] = useState(false);
-  const [metricMode, setMetricMode] = useState<"simple" | "custom">("simple");
+  const [metricMode, setMetricMode] = useState<"simple" | "custom" | "ai">("simple");
+
+  const [aiDescription, setAiDescription] = useState("");
+  const [aiSql, setAiSql] = useState("");
+  const [aiPreviewValue, setAiPreviewValue] = useState<number | null>(null);
+  const [aiPreviewError, setAiPreviewError] = useState<string | null>(null);
+  const [aiGenerating, setAiGenerating] = useState(false);
+  const [aiPreviewing, setAiPreviewing] = useState(false);
   const [editingMetric, setEditingMetric] = useState<any | null>(null);
 
   const [formData, setFormData] = useState({
@@ -99,6 +106,7 @@ export default function MetricsPage() {
       if (!expr) return;
       formData.expression = expr;
     }
+    if (metricMode === "ai" && !aiSql) return;
 
     setCreating(true);
     try {
@@ -106,12 +114,12 @@ export default function MetricsPage() {
       if (metricMode === "simple") {
         payload.field_name = formData.field_name;
         payload.aggregation = formData.aggregation;
+      } else if (metricMode === "custom") {
+        payload.field_name = "";
+        payload.formula = buildFormulaExpr();
       } else {
         payload.field_name = "";
-        const formula = buildFormulaExpr();
-        // TEMP DEBUG: also try with hardcoded formula
-        payload.formula = "SUM(current_value) - SUM(invested)";
-        console.log("CUSTOM_FORMULA:", formula, "SENDING:", payload.formula);
+        payload.formula = aiSql;
       }
       if (editingMetric) {
         const result = await api.updateMetric(datasetId, editingMetric.id, payload);
@@ -135,6 +143,10 @@ export default function MetricsPage() {
     setFormulaFields(["", ""]);
     setFormulaOperators(["-"]);
     setFormulaAggs(["SUM", "SUM"]);
+    setAiDescription("");
+    setAiSql("");
+    setAiPreviewValue(null);
+    setAiPreviewError(null);
     setMetricMode("simple");
   };
 
@@ -254,6 +266,12 @@ export default function MetricsPage() {
               >
                 Custom
               </button>
+              <button
+                onClick={() => setMetricMode("ai")}
+                className={`px-3 py-1.5 text-xs font-medium rounded-lg transition-colors ${metricMode === "ai" ? "bg-slate-900 text-white" : "bg-slate-100 text-slate-600 hover:bg-slate-200"}`}
+              >
+                AI
+              </button>
             </div>
           </div>
 
@@ -295,6 +313,84 @@ export default function MetricsPage() {
                   ))}
                 </select>
               </div>
+            </div>
+          ) : metricMode === "ai" ? (
+            <div className="space-y-3">
+              <div>
+                <label className="text-xs text-slate-400 font-medium uppercase tracking-wider">Describe your metric</label>
+                <textarea
+                  value={aiDescription}
+                  onChange={(e) => setAiDescription(e.target.value)}
+                  placeholder="e.g., Total active customer percentage"
+                  rows={2}
+                  className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 resize-none"
+                />
+              </div>
+              <button
+                onClick={async () => {
+                  if (!datasetId || !aiDescription) return;
+                  setAiGenerating(true);
+                  setAiSql("");
+                  setAiPreviewValue(null);
+                  setAiPreviewError(null);
+                  try {
+                    const result = await api.suggestSQL(datasetId, aiDescription);
+                    setAiSql(result.sql);
+                  } catch (err: any) {
+                    setAiPreviewError(err.message);
+                  } finally {
+                    setAiGenerating(false);
+                  }
+                }}
+                disabled={aiGenerating || !aiDescription}
+                className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
+              >
+                {aiGenerating ? "Generating..." : "Generate SQL"}
+              </button>
+              {aiSql && (
+                <>
+                  <div>
+                    <label className="text-xs text-slate-400 font-medium uppercase tracking-wider">Generated SQL</label>
+                    <textarea
+                      value={aiSql}
+                      onChange={(e) => { setAiSql(e.target.value); setAiPreviewValue(null); setAiPreviewError(null); }}
+                      rows={3}
+                      className="mt-1 w-full px-3 py-2 rounded-lg border border-slate-200 text-sm font-mono focus:outline-none focus:ring-2 focus:ring-slate-900/20 resize-none"
+                    />
+                  </div>
+                  <button
+                    onClick={async () => {
+                      if (!datasetId || !aiSql) return;
+                      setAiPreviewing(true);
+                      setAiPreviewValue(null);
+                      setAiPreviewError(null);
+                      try {
+                        const result = await api.previewSQL(datasetId, aiSql);
+                        if (result.error) setAiPreviewError(result.error);
+                        else setAiPreviewValue(result.value);
+                      } catch (err: any) {
+                        setAiPreviewError(err.message);
+                      } finally {
+                        setAiPreviewing(false);
+                      }
+                    }}
+                    disabled={aiPreviewing}
+                    className="px-4 py-2 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+                  >
+                    {aiPreviewing ? "Previewing..." : "Preview Value"}
+                  </button>
+                  {aiPreviewValue !== null && (
+                    <div className="text-sm bg-green-50 border border-green-200 text-green-700 px-3 py-2 rounded">
+                      Preview: {aiPreviewValue}
+                    </div>
+                  )}
+                  {aiPreviewError && (
+                    <div className="text-sm bg-red-50 border border-red-200 text-red-600 px-3 py-2 rounded">
+                      Error: {aiPreviewError}
+                    </div>
+                  )}
+                </>
+              )}
             </div>
           ) : (
             <div className="space-y-3">
@@ -382,7 +478,8 @@ export default function MetricsPage() {
                 creating ||
                 !formData.name ||
                 (metricMode === "simple" && !formData.field_name) ||
-                (metricMode === "custom" && formulaFields.some((f) => !f))
+                (metricMode === "custom" && formulaFields.some((f) => !f)) ||
+                (metricMode === "ai" && !aiSql)
               }
               className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
             >
