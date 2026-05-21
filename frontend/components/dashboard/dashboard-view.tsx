@@ -54,7 +54,7 @@ function SortableChartCard({ chart, onDelete }: { chart: ChartSpec; onDelete: (i
         <div
           {...attributes}
           {...listeners}
-          className="absolute left-2 top-1/2 -translate-y-1/2 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1.5 rounded-lg hover:bg-slate-100"
+          className="absolute -left-1.5 top-2 cursor-grab active:cursor-grabbing opacity-0 group-hover:opacity-100 transition-opacity z-10 p-1 rounded hover:bg-slate-100"
         >
           <svg className="w-4 h-4 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
@@ -78,7 +78,10 @@ export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
   );
 
-  const sortedCharts = [...charts].sort((a, b) => a.order - b.order);
+  const otherCharts = charts.filter((c) => c.chart_type !== "kpi").sort((a, b) => a.order - b.order);
+  const kpiCards = charts.filter((c) => c.chart_type === "kpi").sort((a, b) => a.order - b.order);
+  const fullWidthCharts = otherCharts.filter((c) => c.width === "full");
+  const halfWidthCharts = otherCharts.filter((c) => c.width === "half");
 
   const handleDeleteChart = useCallback(async (chartId: string) => {
     if (!dashboard.id) return;
@@ -92,42 +95,68 @@ export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
     }
   }, [dashboard.id, onRefresh]);
 
-  const handleDragEnd = async (event: DragEndEvent) => {
+  const persistOrder = useCallback(async (reorderedCharts: ChartSpec[]) => {
+    if (!dashboard.id) return;
+    try {
+      await api.reorderCharts(dashboard.id, reorderedCharts.map((c) => c.id));
+    } catch (err) {
+      console.error(err);
+    }
+  }, [dashboard.id]);
+
+  const handleGroupDragEnd = (groupCharts: ChartSpec[]) => async (event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = sortedCharts.findIndex((c) => c.id === active.id);
-    const newIndex = sortedCharts.findIndex((c) => c.id === over.id);
+    const oldIndex = groupCharts.findIndex((c) => c.id === active.id);
+    const newIndex = groupCharts.findIndex((c) => c.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(sortedCharts, oldIndex, newIndex);
-    const updated = reordered.map((c, i) => ({ ...c, order: i }));
-    setCharts(updated);
+    const moved = arrayMove(groupCharts, oldIndex, newIndex);
+    const updated = moved.map((c, i) => ({ ...c, order: i }));
 
-    if (dashboard.id) {
-      try {
-        await api.reorderCharts(dashboard.id, updated.map((c) => c.id));
-      } catch (err) {
-        console.error(err);
-      }
-    }
+    setCharts((prev) => {
+      const map = new Map(prev.map((c) => [c.id, c]));
+      for (const c of updated) map.set(c.id, c);
+      return Array.from(map.values());
+    });
+
+    await persistOrder(updated);
   };
 
-  return (
-    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-      <SortableContext items={sortedCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-        <div className="space-y-4">
-          {sortedCharts.length === 0 ? (
-            <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
-              <p className="text-sm text-slate-400">No charts generated</p>
-            </div>
-          ) : (
-            sortedCharts.map((chart) => (
+  const renderSortableGroup = (title: string | null, groupCharts: ChartSpec[], className: string) => {
+    if (groupCharts.length === 0) return null;
+    return (
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragEnd={handleGroupDragEnd(groupCharts)}
+      >
+        <SortableContext items={groupCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+          {title && <h3 className="text-sm font-medium text-slate-700 mb-3">{title}</h3>}
+          <div className={className}>
+            {groupCharts.map((chart) => (
               <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
-            ))
-          )}
-        </div>
-      </SortableContext>
-    </DndContext>
+            ))}
+          </div>
+        </SortableContext>
+      </DndContext>
+    );
+  };
+
+  if (charts.length === 0) {
+    return (
+      <div className="text-center py-20 bg-white rounded-xl border border-slate-200">
+        <p className="text-sm text-slate-400">No charts generated</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-6">
+      {renderSortableGroup(null, kpiCards, "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4")}
+      {renderSortableGroup("Full Width", fullWidthCharts, "space-y-4")}
+      {renderSortableGroup("Half Width", halfWidthCharts, "grid grid-cols-1 lg:grid-cols-2 gap-4")}
+    </div>
   );
 }
