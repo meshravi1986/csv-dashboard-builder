@@ -102,6 +102,13 @@ class ApiService {
     return res.json();
   }
 
+  async getAvailableMetrics(datasetId: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/available`, { headers });
+    if (!res.ok) throw new Error("Available metrics fetch failed");
+    return res.json();
+  }
+
   async getMetrics(datasetId: string) {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {

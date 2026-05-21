@@ -26,6 +26,10 @@ export default function MetricsPage() {
   const [aiGenerating, setAiGenerating] = useState(false);
   const [aiPreviewing, setAiPreviewing] = useState(false);
   const [editingMetric, setEditingMetric] = useState<any | null>(null);
+  const [showSelectPanel, setShowSelectPanel] = useState(false);
+  const [availableMetrics, setAvailableMetrics] = useState<any[]>([]);
+  const [loadingAvailable, setLoadingAvailable] = useState(false);
+  const [selectingMetric, setSelectingMetric] = useState<string | null>(null);
 
   const [formData, setFormData] = useState({
     name: "",
@@ -210,6 +214,43 @@ export default function MetricsPage() {
     }
   };
 
+  const loadAvailableMetrics = async () => {
+    if (!datasetId) return;
+    setLoadingAvailable(true);
+    setShowSelectPanel(true);
+    try {
+      const data = await api.getAvailableMetrics(datasetId);
+      setAvailableMetrics(data.metrics || []);
+    } catch (err) {
+      console.error(err);
+      setAvailableMetrics([]);
+    } finally {
+      setLoadingAvailable(false);
+    }
+  };
+
+  const handleSelectMetric = async (metric: any) => {
+    if (!datasetId) return;
+    setSelectingMetric(metric.id);
+    try {
+      const payload: any = { name: metric.name };
+      if (metric.formula) {
+        payload.field_name = "";
+        payload.formula = metric.formula;
+      } else {
+        payload.field_name = metric.field_name;
+        payload.aggregation = metric.aggregation;
+      }
+      const result = await api.createMetric(datasetId, payload);
+      setMetrics((prev) => [...prev, result]);
+      setAvailableMetrics((prev) => prev.filter((m) => m.id !== metric.id));
+    } catch (err: any) {
+      console.error(err);
+    } finally {
+      setSelectingMetric(null);
+    }
+  };
+
   const handleGenerate = () => {
     if (!datasetId) return;
     router.push(`/dashboard?dataset_id=${datasetId}`);
@@ -238,6 +279,13 @@ export default function MetricsPage() {
             className="px-4 py-2 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors"
           >
             Add Metric
+          </button>
+          <button
+            onClick={loadAvailableMetrics}
+            disabled={loadingAvailable}
+            className="px-4 py-2 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+          >
+            {loadingAvailable ? "Loading..." : "Select Metrics"}
           </button>
           <button
             onClick={handleGenerate}
@@ -486,6 +534,57 @@ export default function MetricsPage() {
               {creating ? "Saving..." : editingMetric ? "Update Metric" : "Create Metric"}
             </button>
           </div>
+        </div>
+      )}
+
+      {showSelectPanel && (
+        <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
+          <div className="flex items-center justify-between">
+            <h3 className="text-sm font-medium text-slate-900">Select Metric from Other Datasets</h3>
+            <button
+              onClick={() => { setShowSelectPanel(false); setAvailableMetrics([]); }}
+              className="text-sm text-slate-400 hover:text-slate-600"
+            >
+              Close
+            </button>
+          </div>
+
+          {loadingAvailable ? (
+            <div className="flex items-center justify-center py-10">
+              <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-slate-900" />
+            </div>
+          ) : availableMetrics.length === 0 ? (
+            <div className="text-center py-10">
+              <p className="text-sm text-slate-400">No reusable metrics found</p>
+              <p className="text-xs text-slate-300 mt-1">
+                Metrics from other datasets are shown here when all their required fields exist in this dataset
+              </p>
+            </div>
+          ) : (
+            <div className="divide-y divide-slate-100">
+              {availableMetrics.map((m) => (
+                <div key={m.id} className="py-3 flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm font-medium text-slate-900">{m.name}</p>
+                    <p className="text-xs text-slate-400 mt-0.5 truncate">
+                      {m.formula || `${m.aggregation}(${m.field_name})`}
+                    </p>
+                    <div className="flex items-center gap-3 mt-1">
+                      <span className="text-xs text-slate-400">from {m.source_dataset_name}</span>
+                      <span className="text-xs text-slate-400">fields: {m.required_fields?.join(", ")}</span>
+                    </div>
+                  </div>
+                  <button
+                    onClick={() => handleSelectMetric(m)}
+                    disabled={selectingMetric === m.id}
+                    className="ml-4 px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50 whitespace-nowrap"
+                  >
+                    {selectingMetric === m.id ? "Adding..." : "Select"}
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
         </div>
       )}
 

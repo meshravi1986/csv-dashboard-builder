@@ -17,7 +17,9 @@ from app.api.dashboards import get_dataset
 from app.engine.profiling import profile_dataset
 from app.services.upload import get_parquet_path
 from app.services.semantic import get_ai_semantic_suggestions
+from app.utils.duckdb import get_duckdb
 import json
+import re
 import uuid
 from datetime import datetime
 
@@ -164,6 +166,56 @@ def get_all_metrics(user: dict = Depends(get_current_user)):
         for m in metrics:
             m["dataset_name"] = dataset_map.get(m["dataset_id"], "Unknown")
     return {"metrics": metrics}
+
+
+def _extract_metric_fields(metric: dict) -> list[str]:
+    fields = []
+    if metric.get("field_name"):
+        fields.append(metric["field_name"])
+    if metric.get("formula"):
+        quoted = re.findall(r'"([^"]+)"', metric["formula"])
+        fields.extend(quoted)
+        if not quoted:
+            for m in re.finditer(r'(\w+)\(([^)]+)\)', metric["formula"]):
+                field = m.group(2).strip()
+                if field and field.upper() not in ("CASE", "WHEN", "THEN", "ELSE", "END", "NULL", "TRUE", "FALSE"):
+                    fields.append(field)
+    return list(set(fields))
+
+
+@router.get("/{dataset_id}/metrics/available")
+def get_available_metrics(
+    dataset_id: str,
+    user: dict = Depends(get_current_user),
+):
+    dataset = get_dataset(dataset_id, user["id"])
+    parquet_path = get_parquet_path(dataset["parquet_path"])
+
+    with get_duckdb() as conn:
+        cols = conn.execute(f"SELECT column_name FROM (DESCRIBE SELECT * FROM '{parquet_path}')").fetchall()
+        current_fields = {c[0] for c in cols}
+
+    supabase = get_supabase()
+    metrics_result = supabase.table("metrics").select("*").eq("user_id", user["id"]).neq("dataset_id", dataset_id).execute()
+    all_metrics = metrics_result.data or []
+
+    dataset_ids = list(set(m["dataset_id"] for m in all_metrics))
+    dataset_map = {}
+    if dataset_ids:
+        ds_result = supabase.table("datasets").select("id,name").in_("id", dataset_ids).execute()
+        dataset_map = {d["id"]: d["name"] for d in (ds_result.data or [])}
+
+    available = []
+    for m in all_metrics:
+        required = _extract_metric_fields(m)
+        if required and all(f in current_fields for f in required):
+            available.append({
+                **m,
+                "required_fields": required,
+                "source_dataset_name": dataset_map.get(m["dataset_id"], "Unknown"),
+            })
+
+    return {"metrics": available}
 
 
 @router.get("/{dataset_id}/metrics")
