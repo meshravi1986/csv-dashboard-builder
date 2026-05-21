@@ -1,0 +1,13 @@
+{
+  "name": "csv-dashboard-builder",
+  "private": true,
+  "scripts": {
+    "frontend:dev": "cd frontend && npm run dev",
+    "backend:dev": "cd backend && uvicorn app.main:app --reload",
+    "dev": "concurrently \"npm run frontend:dev\" \"npm run backend:dev\"",
+    "setup": "cd frontend && npm install && cd ../backend && pip install -r requirements.txt"
+  },
+  "devDependencies": {
+    "concurrently": "^8.2.2"
+  }
+}

@@ -1,0 +1,156 @@
+from pydantic import BaseModel, Field
+from typing import List, Optional, Any, Literal
+from datetime import datetime
+
+
+AGGREGATION_TYPES = Literal["SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"]
+
+
+class UploadResponse(BaseModel):
+    dataset_id: str
+    filename: str
+    row_count: int
+    column_count: int
+
+
+class FieldProfile(BaseModel):
+    field_name: str
+    detected_type: str
+    null_count: int
+    null_percent: float
+    cardinality: int
+    sample_values: List[str]
+    is_date: bool
+    min: Optional[Any] = None
+    max: Optional[Any] = None
+    mean: Optional[float] = None
+
+
+class DatasetProfileResponse(BaseModel):
+    dataset_id: str
+    field_count: int
+    row_count: int
+    total_null_cells: int
+    fields: List[FieldProfile]
+
+
+class SemanticField(BaseModel):
+    field_name: str
+    role: Literal["dimension", "measure", "date"]
+    aggregation: Optional[AGGREGATION_TYPES] = None
+    formatting: Optional[str] = None
+    description: Optional[str] = None
+    suggested_role: Optional[Literal["dimension", "measure", "date"]] = None
+    suggested_aggregation: Optional[AGGREGATION_TYPES] = None
+
+
+class SemanticUpdateRequest(BaseModel):
+    fields: List[SemanticField]
+
+
+class SemanticSuggestResponse(BaseModel):
+    fields: List[SemanticField]
+
+
+class MetricCreate(BaseModel):
+    name: str = Field(..., min_length=1)
+    field_name: str = ""
+    aggregation: AGGREGATION_TYPES = "SUM"
+    formula: Optional[str] = None
+
+
+class MetricResponse(BaseModel):
+    id: str
+    dataset_id: str
+    user_id: str
+    name: str
+    expression: str
+    aggregation: str
+    field_name: str
+    formula: Optional[str] = None
+    created_at: str
+    updated_at: str
+
+
+class ChartCreateRequest(BaseModel):
+    chart_type: Literal["line", "bar", "kpi", "scatter", "pie"]
+    x_field: str = ""
+    y_field: str = ""
+    aggregation: AGGREGATION_TYPES = "SUM"
+    title: Optional[str] = None
+    formula: Optional[str] = None
+
+
+class ChartData(BaseModel):
+    labels: List[str] = []
+    values: List[Any] = []
+
+
+class ChartSpec(BaseModel):
+    id: str
+    dashboard_id: str
+    chart_type: Literal["line", "bar", "kpi", "scatter", "pie"]
+    title: str
+    x_field: str
+    y_field: str
+    aggregation: AGGREGATION_TYPES
+    x_role: Literal["dimension", "date", "measure"]
+    y_role: Literal["measure"]
+    semantic_reasoning: str
+    chart_reasoning: str
+    aggregation_reasoning: str
+    order: int
+    width: Literal["full", "half"]
+    data: Optional[ChartData] = None
+    created_at: str
+    updated_at: str
+
+
+class DashboardResponse(BaseModel):
+    id: str
+    dataset_id: str
+    user_id: str
+    title: str
+    description: Optional[str] = None
+    charts: List[ChartSpec]
+    created_at: str
+    updated_at: str
+
+
+class DashboardListResponse(BaseModel):
+    dashboards: List[DashboardResponse]
+
+
+class DashboardUpdate(BaseModel):
+    title: Optional[str] = None
+    description: Optional[str] = None
+    charts: Optional[List[ChartSpec]] = None
+
+
+class QueryRequest(BaseModel):
+    dataset_id: str
+    query: str
+
+
+class QueryResponse(BaseModel):
+    columns: List[str]
+    rows: List[List[Any]]
+    row_count: int
+
+
+class DatasetResponse(BaseModel):
+    id: str
+    user_id: str
+    name: str
+    original_filename: str
+    parquet_path: str
+    row_count: int
+    column_count: int
+    file_size: int
+    status: str
+    created_at: str
+    updated_at: str
+
+
+class ErrorResponse(BaseModel):
+    detail: str

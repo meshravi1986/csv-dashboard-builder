@@ -1,0 +1,10 @@
+node_modules/
+.venv/
+__pycache__/
+*.pyc
+.env
+.env.local
+backend/create_metric_debug.log
+backend/app/temp/
+.DS_Store
+.next/
