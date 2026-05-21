@@ -40,7 +40,7 @@ export interface SemanticField {
   formatting?: string;
   description?: string;
   suggested_role?: "dimension" | "measure" | "date" | null;
-  suggested_  aggregation?: "SUM" | "AVG" | "COUNT" | "MIN" | "MAX" | "COUNT_DISTINCT" | null;
+  suggested_aggregation?: "SUM" | "AVG" | "COUNT" | "MIN" | "MAX" | "COUNT_DISTINCT" | null;
 }
 
 export interface Metric {

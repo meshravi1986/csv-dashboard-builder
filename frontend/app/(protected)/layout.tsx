@@ -4,7 +4,6 @@ import { useEffect, useState } from "react";
 import { useRouter, usePathname } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import type { AuthUser } from "@/types";
-import { NavBar } from "@/components/layout/nav-bar";
 
 export default function ProtectedLayout({
   children,
@@ -15,16 +14,12 @@ export default function ProtectedLayout({
   const pathname = usePathname();
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
 
   useEffect(() => {
     const getUser = async () => {
-      const {
-        data: { session },
-      } = await supabase.auth.getSession();
-      if (!session) {
-        router.push("/login");
-        return;
-      }
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) { router.push("/login"); return; }
       setUser({
         id: session.user.id,
         email: session.user.email!,
@@ -36,7 +31,7 @@ export default function ProtectedLayout({
     getUser();
   }, [router]);
 
-  if (loading) {
+  if (loading || !user) {
     return (
       <div className="min-h-screen flex items-center justify-center">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-slate-900" />
@@ -44,62 +39,84 @@ export default function ProtectedLayout({
     );
   }
 
-  const steps = [
-    { path: "/upload", label: "Upload", number: 1 },
-    { path: "/profile", label: "Profile", number: 2 },
-    { path: "/semantic", label: "Semantics", number: 3 },
-    { path: "/metrics", label: "Metrics", number: 4 },
-    { path: "/dashboard", label: "Dashboard", number: 5 },
+  const navItems = [
+    { path: "/dashboards", label: "My Dashboards", icon: "M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" },
+    { path: "/my-metrics", label: "My Metrics", icon: "M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" },
   ];
 
-  const currentStepIndex = steps.findIndex((s) =>
-    pathname.startsWith(s.path)
-  );
+  const handleLogout = async () => {
+    await supabase.auth.signOut();
+    router.push("/login");
+  };
 
   return (
-    <div className="min-h-screen bg-slate-50">
-      <NavBar user={user} />
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        <div className="mb-8">
-          <div className="flex items-center justify-between">
-            {steps.map((step, index) => (
-              <div key={step.path} className="flex items-center">
-                <div
-                  className={`flex items-center gap-2 ${
-                    index <= currentStepIndex
-                      ? "text-slate-900"
-                      : "text-slate-300"
+    <div className="min-h-screen bg-slate-50 flex">
+      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 transform transition-transform lg:translate-x-0 lg:static lg:inset-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+        <div className="flex flex-col h-full">
+          <div className="flex items-center gap-2 px-6 h-16 border-b border-slate-200 cursor-pointer" onClick={() => router.push("/dashboards")}>
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
+              <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+            </div>
+            <span className="font-semibold text-slate-900">CSV Dashboard Builder</span>
+          </div>
+
+          <nav className="flex-1 px-3 py-4 space-y-1">
+            {navItems.map((item) => {
+              const isActive = pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path));
+              return (
+                <button
+                  key={item.path}
+                  onClick={() => { router.push(item.path); setSidebarOpen(false); }}
+                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
+                    isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
                   }`}
                 >
-                  <div
-                    className={`w-8 h-8 rounded-full flex items-center justify-center text-sm font-medium ${
-                      index < currentStepIndex
-                        ? "bg-slate-900 text-white"
-                        : index === currentStepIndex
-                        ? "bg-slate-900 text-white"
-                        : "bg-slate-100 text-slate-400"
-                    }`}
-                  >
-                    {step.number}
-                  </div>
-                  <span className="text-sm font-medium hidden sm:block">
-                    {step.label}
-                  </span>
-                </div>
-                {index < steps.length - 1 && (
-                  <div
-                    className={`w-12 sm:w-20 h-px mx-2 ${
-                      index < currentStepIndex
-                        ? "bg-slate-900"
-                        : "bg-slate-200"
-                    }`}
-                  />
-                )}
+                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
+                  </svg>
+                  {item.label}
+                </button>
+              );
+            })}
+          </nav>
+
+          <div className="px-3 py-4 border-t border-slate-200">
+            <div className="flex items-center gap-3 px-3 py-2">
+              {user.avatar_url && (
+                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+              )}
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium text-slate-900 truncate">{user.name}</p>
+                <p className="text-xs text-slate-400 truncate">{user.email}</p>
               </div>
-            ))}
+            </div>
+            <button
+              onClick={handleLogout}
+              className="w-full mt-1 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left"
+            >
+              Sign out
+            </button>
           </div>
         </div>
-        {children}
+      </aside>
+
+      <div className="flex-1 flex flex-col min-w-0">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 lg:px-8">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 mr-3"
+          >
+            <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
+            </svg>
+          </button>
+        </header>
+
+        <main className="flex-1 p-4 lg:p-8 overflow-auto">
+          {children}
+        </main>
       </div>
     </div>
   );

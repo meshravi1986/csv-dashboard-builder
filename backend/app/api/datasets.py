@@ -152,6 +152,20 @@ def preview_metric_sql(
         return {"value": None, "error": str(e)}
 
 
+@router.get("/metrics/all")
+def get_all_metrics(user: dict = Depends(get_current_user)):
+    supabase = get_supabase()
+    result = supabase.table("metrics").select("*").eq("user_id", user["id"]).execute()
+    metrics = result.data or []
+    dataset_ids = list(set(m["dataset_id"] for m in metrics))
+    if dataset_ids:
+        datasets_result = supabase.table("datasets").select("id,name").in_("id", dataset_ids).execute()
+        dataset_map = {d["id"]: d["name"] for d in (datasets_result.data or [])}
+        for m in metrics:
+            m["dataset_name"] = dataset_map.get(m["dataset_id"], "Unknown")
+    return {"metrics": metrics}
+
+
 @router.get("/{dataset_id}/metrics")
 def get_metrics(
     dataset_id: str,

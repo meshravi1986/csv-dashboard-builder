@@ -6,7 +6,7 @@ import { api } from "@/services/api";
 import type { SemanticField, DatasetProfile } from "@/types";
 
 const ROLE_OPTIONS: SemanticField["role"][] = ["dimension", "measure", "date"];
-const AGG_OPTIONS: SemanticField["aggregation"][] = ["SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"];
+const AGG_OPTIONS = ["SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"] as const;
 
 export default function SemanticPage() {
   const router = useRouter();
@@ -33,7 +33,7 @@ export default function SemanticPage() {
         ]);
         setProfile(profileData);
 
-        const initialFields: SemanticField[] = profileData.fields.map((f) => {
+        const initialFields: SemanticField[] = profileData.fields.map((f: any) => {
           const suggestion = suggestedFields?.fields?.find(
             (s: any) => s.field_name === f.field_name
           );

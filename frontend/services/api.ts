@@ -95,6 +95,13 @@ class ApiService {
     return res.json();
   }
 
+  async getAllMetrics() {
+    const headers = await this.getAuthHeaders();
+    const res = await fetch(`${this.baseUrl}/datasets/metrics/all`, { headers });
+    if (!res.ok) throw new Error("Metrics fetch failed");
+    return res.json();
+  }
+
   async getMetrics(datasetId: string) {
     const headers = await this.getAuthHeaders();
     const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {
