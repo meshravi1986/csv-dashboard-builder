@@ -1,4 +1,5 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://csv-dashboard-builder-production.up.railway.app/api/v1";
+// BUILD-MARKER: v3
+const API_URL = "https://csv-dashboard-builder-production.up.railway.app/api/v1";
 
 const FETCH_TIMEOUT = 30000;
 
