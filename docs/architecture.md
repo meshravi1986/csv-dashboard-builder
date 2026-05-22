@@ -103,6 +103,27 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 - **Supabase**: Auth, storage, and database
 - **OpenAI**: Optional AI enhancement (titles, suggestions, metric SQL)
 
+## Security
+
+### Database Access
+- `get_supabase()` uses `SUPABASE_LIMITED_KEY` (falls back to `SUPABASE_SERVICE_KEY`)
+- `get_supabase_admin()` uses `SUPABASE_SERVICE_KEY` — only for operations that need it:
+  - Auth verification (`supabase.auth.get_user()`)
+  - Storage uploads/downloads
+- `SUPABASE_LIMITED_KEY` should be a JWT with a restricted DB role (see `docs/schema.sql`)
+
+### Upload Validation (server-side)
+- File extension check (.csv only)
+- Content-type sniff: header must contain commas (basic CSV heuristic)
+- UTF-8 encoding verification
+- Max file size: 100MB (configurable via `MAX_UPLOAD_SIZE_MB`)
+- Max columns: 200 (configurable via `MAX_CSV_COLUMNS`)
+
+### CORS
+- Comma-separated origins in `CORS_ORIGINS` env var
+- Must include your production frontend URL (e.g., Vercel domain)
+- Default: `http://localhost:3000`
+
 ## Data Flow
 
 1. CSV uploaded → processed by FastAPI → converted to Parquet via Polars

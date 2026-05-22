@@ -5,12 +5,15 @@ from typing import List
 class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_key: str = ""
+    supabase_limited_key: str = ""
     supabase_anon_key: str = ""
     openai_api_key: str = ""
     database_url: str = ""
     app_secret: str = ""
     cors_origins: str = "http://localhost:3000"
     storage_bucket: str = "datasets"
+    max_upload_size_mb: int = 100
+    max_csv_columns: int = 200
 
     @property
     def cors_origin_list(self) -> List[str]:

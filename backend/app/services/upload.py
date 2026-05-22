@@ -19,6 +19,10 @@ TEMP_DIR = Path(__file__).parent.parent / "temp"
 TEMP_DIR.mkdir(exist_ok=True)
 
 
+MAX_FILE_SIZE = settings.max_upload_size_mb * 1024 * 1024
+MAX_COLUMNS = settings.max_csv_columns
+
+
 async def process_upload(file: UploadFile, user_id: str) -> dict:
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
@@ -28,11 +32,32 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
 
     try:
         content = await file.read()
+
+        if len(content) > MAX_FILE_SIZE:
+            raise HTTPException(
+                status_code=400,
+                detail=f"File size exceeds {settings.max_upload_size_mb}MB limit",
+            )
+
+        # Basic CSV content validation: must contain comma-separated values
+        try:
+            header_line = content.decode("utf-8").split("\n")[0].strip()
+            if not header_line or "," not in header_line:
+                raise HTTPException(status_code=400, detail="File does not appear to be a valid CSV (no comma-separated header found)")
+        except UnicodeDecodeError:
+            raise HTTPException(status_code=400, detail="File encoding is not valid UTF-8")
+
         temp_path.write_bytes(content)
 
         df = pl.read_csv(str(temp_path))
         row_count = len(df)
         column_count = len(df.columns)
+
+        if column_count > MAX_COLUMNS:
+            raise HTTPException(
+                status_code=400,
+                detail=f"CSV has {column_count} columns, exceeds the maximum of {MAX_COLUMNS}",
+            )
 
         parquet_filename = f"{user_id}/{uuid.uuid4()}.parquet"
         df.write_parquet(str(parquet_temp))

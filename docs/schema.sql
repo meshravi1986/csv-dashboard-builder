@@ -133,6 +133,22 @@ CREATE POLICY "Users can manage chart specs of their dashboards"
     );
 
 -- Storage bucket setup
--- Run this in Supabase Storage:
+-- Run this in Supabase SQL Editor:
 -- CREATE BUCKET datasets;
 -- Set bucket to private
+
+-- Limited database role for backend application (recommended)
+-- Instead of using the full service key, create a limited role and generate a JWT for it:
+--
+-- CREATE ROLE dashboard_app WITH NO LOGIN;
+-- GRANT USAGE ON SCHEMA public TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON datasets TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON semantic_fields TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON metrics TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON dashboards TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON chart_specs TO dashboard_app;
+-- GRANT SELECT, INSERT, UPDATE, DELETE ON chart_specs TO dashboard_app;
+--
+-- Then create a custom JWT with `role` set to `dashboard_app` and
+-- use it as SUPABASE_LIMITED_KEY in your backend .env.
+-- See: https://supabase.com/docs/guides/database/secure-data#using-custom-roles-and-claims

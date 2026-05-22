@@ -12,7 +12,6 @@ app = FastAPI(
     docs_url="/docs",
 )
 
-print(f"Supabase URL: {settings.supabase_url}", flush=True)
 print(f"CORS origins: {settings.cors_origins}", flush=True)
 
 app.add_middleware(
