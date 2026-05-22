@@ -13,7 +13,7 @@ from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
 from app.utils.duckdb import get_duckdb
 from app.services.dashboard import build_dashboard
-from app.services.upload import get_parquet_path
+from app.services.upload import get_parquet_path, get_dataset_columns
 from app.engine.visualization import query_chart_data, query_chart_data_batch
 from app.config import settings
 
@@ -360,28 +360,13 @@ def check_column_match(
     """Check if current dataset's columns match any existing dashboard's dataset columns."""
     print(f"[column-match] Starting for dataset {dataset_id}", flush=True)
     supabase = get_supabase()
-    try:
-        dataset = get_dataset(dataset_id, user["id"])
-    except HTTPException as e:
-        print(f"[column-match] Dataset {dataset_id} not found: {e}", flush=True)
-        return {"matches": []}
 
-    # Get current dataset columns from parquet
-    try:
-        parquet_path = get_parquet_path(dataset["parquet_path"])
-    except HTTPException as e:
-        print(f"[column-match] Parquet download failed for {dataset_id}: {e}", flush=True)
+    # Get current dataset columns from DB (fast) or parquet schema (fallback)
+    current_cols = get_dataset_columns(dataset_id, supabase)
+    if current_cols is None:
+        print(f"[column-match] Could not get columns for {dataset_id}", flush=True)
         return {"matches": []}
-    if not parquet_path:
-        print(f"[column-match] No parquet path for {dataset_id}", flush=True)
-        return {"matches": []}
-
-    with get_duckdb() as conn:
-        current_cols = set()
-        cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{parquet_path}')").fetchall()
-        for col_name, _ in cols_info:
-            current_cols.add(col_name.lower())
-        print(f"[column-match] Current columns: {sorted(current_cols)}", flush=True)
+    print(f"[column-match] Current columns: {sorted(current_cols)}", flush=True)
 
     # Find all dashboards by this user that have datasets with matching columns
     dashboards = supabase.table("dashboards").select("*").eq("user_id", user["id"]).order("created_at", desc=True).execute()
@@ -392,46 +377,32 @@ def check_column_match(
     for d in dashboards.data:
         ds_id = d.get("dataset_id")
         if not ds_id or ds_id == dataset_id or ds_id in seen_datasets:
-            if ds_id:
-                print(f"[column-match] Skipping dashboard {d['id']} (dataset {ds_id}: already seen or self)", flush=True)
-            else:
-                print(f"[column-match] Skipping dashboard {d['id']} (no dataset_id)", flush=True)
             continue
         seen_datasets.add(ds_id)
 
         try:
-            ds = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
-            if not ds.data:
-                print(f"[column-match] Dataset {ds_id} not found in DB", flush=True)
+            other_cols = get_dataset_columns(ds_id, supabase)
+            if other_cols is None:
                 continue
-
-            ds_name = ds.data[0].get("name", "?")
-            print(f"[column-match] Checking dashboard '{d['title']}' dataset '{ds_name}' ({ds_id})...", flush=True)
-
-            other_path = get_parquet_path(ds.data[0]["parquet_path"])
-            if not other_path:
-                print(f"[column-match] No parquet path for dataset {ds_id}", flush=True)
-                continue
-
-            other_cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{other_path}')").fetchall()
-            other_cols = set()
-            for col_name, _ in other_cols_info:
-                other_cols.add(col_name.lower())
-            print(f"[column-match] Other columns: {sorted(other_cols)}", flush=True)
 
             if current_cols == other_cols:
+                ds_name = ""
+                try:
+                    ds_result = supabase.table("datasets").select("name").eq("id", ds_id).execute()
+                    if ds_result.data:
+                        ds_name = ds_result.data[0].get("name", "")
+                except Exception:
+                    pass
                 vgid = d.get("version_group_id") or d["id"]
                 print(f"[column-match] MATCH! Dashboard '{d['title']}' ({d['id']})", flush=True)
                 matches.append({
                     "dashboard_id": d["id"],
                     "dashboard_title": d["title"],
                     "dataset_id": ds_id,
-                    "dataset_name": ds.data[0].get("name", ""),
+                    "dataset_name": ds_name,
                     "version_group_id": vgid,
                     "version_number": d.get("version_number") or 1,
                 })
-            else:
-                print(f"[column-match] No match: columns differ", flush=True)
         except Exception as e:
             print(f"[column-match] Error checking dataset {ds_id}: {e}", flush=True)
             continue

@@ -60,6 +60,8 @@ class ApiService {
         }
       });
       xhr.addEventListener("error", () => reject(new Error("Upload failed")));
+      xhr.addEventListener("timeout", () => reject(new Error("Upload timed out after 2 minutes")));
+      xhr.timeout = 120000;
       xhr.open("POST", `${this.baseUrl}/upload`);
       if (session?.access_token) {
         xhr.setRequestHeader("Authorization", `Bearer ${session.access_token}`);
@@ -70,7 +72,7 @@ class ApiService {
 
   async getProfile(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/profile`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/profile`, { headers }, 120000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Profile fetch failed" }));
       throw new Error(err.detail || "Profile fetch failed");
@@ -94,7 +96,7 @@ class ApiService {
 
   async getSemanticSuggestions(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/semantics/suggest`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/semantics/suggest`, { headers }, 120000);
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Suggestions failed" }));
       throw new Error(err.detail || "Suggestions failed");

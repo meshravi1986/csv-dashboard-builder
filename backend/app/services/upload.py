@@ -1,4 +1,5 @@
 import os
+import json
 import uuid
 import threading
 import polars as pl
@@ -55,6 +56,7 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
             "column_count": column_count,
             "file_size": len(content),
             "status": "uploaded",
+            "columns": json.dumps(list(df.columns)),
         }
 
         supabase.table("datasets").insert(dataset_data).execute()
@@ -70,21 +72,23 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
                 if not ds_id or ds_id in seen_datasets:
                     continue
                 seen_datasets.add(ds_id)
-                ds_result = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
-                if not ds_result.data:
+                other_cols = get_dataset_columns(ds_id, supabase)
+                if other_cols is None:
                     continue
-                other_path = get_parquet_path(ds_result.data[0]["parquet_path"])
-                if not other_path:
-                    continue
-                other_df = pl.read_parquet(other_path)
-                other_cols = set(c.lower() for c in other_df.columns)
                 if current_cols == other_cols:
+                    ds_name = ""
+                    try:
+                        ds_result = supabase.table("datasets").select("name").eq("id", ds_id).execute()
+                        if ds_result.data:
+                            ds_name = ds_result.data[0].get("name", "")
+                    except Exception:
+                        pass
                     vgid = d.get("version_group_id") or d["id"]
                     column_match = {
                         "dashboard_id": d["id"],
                         "dashboard_title": d["title"],
                         "dataset_id": ds_id,
-                        "dataset_name": ds_result.data[0].get("name", ""),
+                        "dataset_name": ds_name,
                         "version_group_id": vgid,
                         "version_number": d.get("version_number") or 1,
                     }
@@ -137,3 +141,20 @@ def get_parquet_path(parquet_storage_path: str) -> str:
                 temp_path.unlink()
             raise HTTPException(status_code=500, detail=f"Failed to load dataset: {str(e)}")
     return str(temp_path)
+
+
+def get_dataset_columns(dataset_id: str, supabase) -> Optional[set]:
+    """Get column names for a dataset from DB (fast) or parquet schema (fallback)."""
+    try:
+        ds = supabase.table("datasets").select("columns, parquet_path").eq("id", dataset_id).execute()
+        if ds.data and ds.data[0].get("columns"):
+            return set(c.lower() for c in json.loads(ds.data[0]["columns"]))
+        if ds.data:
+            parquet_path = get_parquet_path(ds.data[0]["parquet_path"])
+            if parquet_path:
+                import polars as pl
+                schema = pl.read_parquet_schema(parquet_path)
+                return set(c.lower() for c in schema.keys())
+    except Exception:
+        pass
+    return None
