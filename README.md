@@ -41,6 +41,8 @@ npm run dev
 - **Drag state isolation** — Local chart order guarded against parent re-renders via ref-based sync guard
 - **Filter clear** — Restores original data from ref without re-fetching from server
 - **Version creation resilience** — Dashboard page retries fetch 3x with delay to handle Supabase commit latency
+- **Cascading delete** — Deleting a versioned dashboard removes all versions in the group
+- **Duplicate guard** — `startedRef` prevents React StrictMode double-effect from creating two dashboards
 
 ## Structure
 

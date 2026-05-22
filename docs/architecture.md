@@ -129,3 +129,14 @@ Charts are grouped into three independent sortable contexts (KPI, full-width, ha
 - Filters save the original unfiltered chart data in `unfilteredDataRef` before applying
 - Clearing filters restores data from the ref — **no server round-trip**
 - This avoids a previous infinite re-render loop caused by `dashboard?.charts` in the filter effect deps
+
+## Dashboard Deletion
+
+- Deleting a dashboard from My Dashboards now **cascades to all versions** in the same `version_group_id`
+- Previously only the latest version was removed; the prior version would reappear as the new "latest"
+- Response includes `"deleted": N` confirming how many dashboards were removed
+
+## Duplicate Prevention
+
+- The dashboard generation page uses a `startedRef` guard in its `useEffect` to prevent double invocation
+- React Strict Mode double-invokes effects in development; without the guard, two parallel `generateDashboard` API calls would each create a separate dashboard
