@@ -497,11 +497,21 @@ def delete_dashboard(
     result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Dashboard not found")
+    dash = result.data[0]
 
-    supabase.table("chart_specs").delete().eq("dashboard_id", dashboard_id).execute()
-    supabase.table("dashboards").delete().eq("id", dashboard_id).execute()
+    # If part of a version group, delete ALL versions in the group
+    vgid = dash.get("version_group_id")
+    if vgid:
+        all_versions = supabase.table("dashboards").select("id").eq("version_group_id", vgid).eq("user_id", user["id"]).execute()
+        ids = [d["id"] for d in all_versions.data]
+    else:
+        ids = [dashboard_id]
 
-    return {"status": "success"}
+    for did in ids:
+        supabase.table("chart_specs").delete().eq("dashboard_id", did).execute()
+        supabase.table("dashboards").delete().eq("id", did).execute()
+
+    return {"status": "success", "deleted": len(ids)}
 
 
 @router.get("/dashboards/{dashboard_id}/available-fields")
