@@ -15,12 +15,15 @@ export default function DashboardPage() {
   const [error, setError] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const timerRef = useRef<any>(null);
+  const startedRef = useRef(false);
 
   useEffect(() => {
     if (!datasetId) {
       router.push("/dashboards");
       return;
     }
+    if (startedRef.current) return;
+    startedRef.current = true;
     generateDashboard();
     return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [datasetId, router]);
