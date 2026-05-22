@@ -324,6 +324,34 @@ class ApiService {
     if (!res.ok) throw new Error("Query failed");
     return res.json();
   }
+
+  async checkColumnMatch(datasetId: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/column-match`, { headers });
+    if (!res.ok) throw new Error("Column match check failed");
+    return res.json();
+  }
+
+  async createDashboardVersion(dashboardId: string, newDatasetId: string, tag: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/create-version`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ new_dataset_id: newDatasetId, tag }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Version creation failed" }));
+      throw new Error(err.detail || "Version creation failed");
+    }
+    return res.json();
+  }
+
+  async getDashboardVersions(versionGroupId: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/by-group/${versionGroupId}/versions`, { headers });
+    if (!res.ok) throw new Error("Versions fetch failed");
+    return res.json();
+  }
 }
 
 export const api = new ApiService();

@@ -7,7 +7,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.api import (
     DashboardResponse, DashboardListResponse, DashboardUpdate, ChartCreateRequest,
     FilterSuggestResponse, DimensionFilterConfig, DateFilterConfig, DatePreset,
-    ChartDataRequest,
+    ChartDataRequest, VersionCreateRequest, ColumnMatchResult, VersionInfo,
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
@@ -79,8 +79,8 @@ def generate_dashboard(
     dashboard = build_dashboard(dataset_id, user["id"], semantic_fields, parquet_path, metrics=user_metrics)
     print(f"[generate_dashboard] Dashboard built ({len(dashboard['charts'])} charts) at {time_mod.time() - t0:.1f}s", flush=True)
 
-    # Delete existing dashboard for this dataset
-    existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).execute()
+    # Delete existing dashboard for this dataset (non-versioned only)
+    existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).is_("version_group_id", "null").execute()
     if existing.data:
         for d in existing.data:
             supabase.table("chart_specs").delete().eq("dashboard_id", d["id"]).execute()
@@ -104,12 +104,15 @@ def generate_dashboard(
                         continue
                     raise HTTPException(status_code=500, detail=f"{label} timed out")
 
+    # Set version_group_id = dashboard_id for first version (no grouping)
     dash_payload = {
         "id": db_dashboard_id,
         "user_id": user["id"],
         "dataset_id": dataset_id,
         "title": dashboard["title"],
         "description": dashboard.get("description"),
+        "version_group_id": db_dashboard_id,
+        "version_number": 1,
         "created_at": now,
         "updated_at": now,
     }
@@ -144,6 +147,8 @@ def generate_dashboard(
         _post_json(f"{SUPABASE_REST_URL}/chart_specs", chart_payloads, "Chart batch insert")
 
     dashboard["id"] = db_dashboard_id
+    dashboard["version_group_id"] = db_dashboard_id
+    dashboard["version_number"] = 1
 
     supabase.table("datasets").update({"status": "ready", "updated_at": now}).eq("id", dataset_id).execute()
 
@@ -158,15 +163,234 @@ def list_dashboards(
     supabase = get_supabase()
     result = supabase.table("dashboards").select("*").eq("user_id", user["id"]).order("created_at", desc=True).execute()
 
-    dashboards = []
+    # Group by version_group_id, keep only latest version per group
+    groups: dict[str, dict] = {}
+    version_counts: dict[str, int] = {}
+    version_tags: dict[str, str] = {}
+
     for d in result.data:
+        vgid = d.get("version_group_id") or d["id"]
+        if vgid not in groups or (d.get("version_number") or 1) > (groups[vgid].get("version_number") or 0):
+            groups[vgid] = d
+        version_counts[vgid] = version_counts.get(vgid, 0) + 1
+        # Track the latest tag
+        if d.get("tag"):
+            if vgid not in version_tags or (d.get("version_number") or 1) >= version_tags.get(vgid + "_vn", 0):
+                version_tags[vgid] = d["tag"]
+                version_tags[vgid + "_vn"] = d.get("version_number") or 1
+
+    dashboards = []
+    for vgid, d in groups.items():
         charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", d["id"]).order("order").execute()
         dashboards.append({
             **d,
             "charts": charts_result.data,
+            "version_count": version_counts.get(vgid, 1),
+            "version_group_id": vgid,
+            "latest_tag": version_tags.get(vgid),
         })
 
     return {"dashboards": dashboards}
+
+
+@router.get("/dashboards/by-group/{version_group_id}/versions")
+def list_dashboard_versions(
+    version_group_id: str,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    result = supabase.table("dashboards").select("*").eq("version_group_id", version_group_id).eq("user_id", user["id"]).order("version_number", desc=True).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="No versions found")
+
+    versions = []
+    for d in result.data:
+        charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", d["id"]).order("order").execute()
+        versions.append({
+            **d,
+            "charts": charts_result.data,
+            "charts_count": len(charts_result.data),
+        })
+
+    return {"versions": versions}
+
+
+@router.post("/dashboards/{dashboard_id}/create-version")
+def create_dashboard_version(
+    dashboard_id: str,
+    req: VersionCreateRequest,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    now = datetime.utcnow().isoformat()
+    headers = _rest_headers()
+
+    def _post_json(url: str, payload: dict, label: str):
+        with httpx.Client(timeout=15.0) as client:
+            for attempt in range(2):
+                try:
+                    resp = client.post(url, headers=headers, json=payload)
+                    if resp.status_code < 400:
+                        return resp
+                    raise HTTPException(status_code=500, detail=f"{label} failed: {resp.text}")
+                except httpx.TimeoutException:
+                    if attempt < 1:
+                        continue
+                    raise HTTPException(status_code=500, detail=f"{label} timed out")
+
+    # Get source dashboard
+    source = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not source.data:
+        raise HTTPException(status_code=404, detail="Source dashboard not found")
+    source = source.data[0]
+
+    source_dataset_id = source["dataset_id"]
+    new_dataset_id = req.new_dataset_id
+    version_group_id = source.get("version_group_id") or source["id"]
+
+    # Verify new dataset exists
+    get_dataset(new_dataset_id, user["id"])
+
+    # Get max version number in group
+    max_vn = supabase.table("dashboards").select("version_number").eq("version_group_id", version_group_id).eq("user_id", user["id"]).order("version_number", desc=True).limit(1).execute()
+    next_vn = (max_vn.data[0]["version_number"] + 1) if max_vn.data else 2
+
+    # Copy semantics from source dataset to new dataset
+    semantic_result = supabase.table("semantic_fields").select("*").eq("dataset_id", source_dataset_id).execute()
+    for sf in semantic_result.data:
+        supabase.table("semantic_fields").insert({
+            "dataset_id": new_dataset_id,
+            "field_name": sf["field_name"],
+            "role": sf["role"],
+            "aggregation": sf.get("aggregation"),
+            "formatting": sf.get("formatting"),
+            "description": sf.get("description"),
+        }).execute()
+
+    # Copy metrics from source dataset to new dataset
+    metrics_result = supabase.table("metrics").select("*").eq("dataset_id", source_dataset_id).execute()
+    for m in metrics_result.data:
+        supabase.table("metrics").insert({
+            "dataset_id": new_dataset_id,
+            "user_id": user["id"],
+            "name": m["name"],
+            "expression": m["expression"],
+            "aggregation": m["aggregation"],
+            "field_name": m["field_name"],
+            "formula": m.get("formula"),
+        }).execute()
+
+    # Create new dashboard
+    new_dash_id = str(uuid.uuid4())
+    dash_payload = {
+        "id": new_dash_id,
+        "user_id": user["id"],
+        "dataset_id": new_dataset_id,
+        "title": source["title"],
+        "description": source.get("description"),
+        "version_group_id": version_group_id,
+        "version_number": next_vn,
+        "tag": req.tag,
+        "created_at": now,
+        "updated_at": now,
+    }
+    _post_json(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert")
+
+    # Copy chart_specs from source dashboard
+    chart_specs = supabase.table("chart_specs").select("*").eq("dashboard_id", dashboard_id).order("order").execute()
+    chart_payloads = []
+    for cs in chart_specs.data:
+        chart_payloads.append({
+            "id": str(uuid.uuid4()),
+            "dashboard_id": new_dash_id,
+            "chart_type": cs["chart_type"],
+            "title": cs["title"],
+            "x_field": cs["x_field"],
+            "y_field": cs["y_field"],
+            "aggregation": cs["aggregation"],
+            "formula": cs.get("formula"),
+            "x_role": cs["x_role"],
+            "y_role": cs["y_role"],
+            "semantic_reasoning": cs["semantic_reasoning"],
+            "chart_reasoning": cs["chart_reasoning"],
+            "aggregation_reasoning": cs["aggregation_reasoning"],
+            "order": cs["order"],
+            "width": cs["width"],
+            "created_at": now,
+            "updated_at": now,
+        })
+    if chart_payloads:
+        _post_json(f"{SUPABASE_REST_URL}/chart_specs", chart_payloads, "Chart batch insert")
+
+    supabase.table("datasets").update({"status": "ready", "updated_at": now}).eq("id", new_dataset_id).execute()
+
+    return {
+        "id": new_dash_id,
+        "version_group_id": version_group_id,
+        "version_number": next_vn,
+        "tag": req.tag,
+    }
+
+
+@router.get("/datasets/{dataset_id}/column-match")
+def check_column_match(
+    dataset_id: str,
+    user: dict = Depends(get_current_user),
+):
+    """Check if current dataset's columns match any existing dashboard's dataset columns."""
+    supabase = get_supabase()
+    dataset = get_dataset(dataset_id, user["id"])
+
+    # Get current dataset columns from parquet
+    parquet_path = get_parquet_path(dataset["parquet_path"])
+    if not parquet_path:
+        return {"matches": []}
+
+    with get_duckdb() as conn:
+        current_cols = set()
+        cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{parquet_path}')").fetchall()
+        for col_name, _ in cols_info:
+            current_cols.add(col_name.lower())
+
+    # Find all dashboards by this user that have datasets with matching columns
+    dashboards = supabase.table("dashboards").select("*").eq("user_id", user["id"]).order("created_at", desc=True).execute()
+
+    matches = []
+    seen_datasets = set()
+    for d in dashboards.data:
+        ds_id = d["dataset_id"]
+        if ds_id == dataset_id or ds_id in seen_datasets:
+            continue
+        seen_datasets.add(ds_id)
+
+        ds = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
+        if not ds.data:
+            continue
+
+        other_path = get_parquet_path(ds.data[0]["parquet_path"])
+        if not other_path:
+            continue
+
+        try:
+            other_cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{other_path}')").fetchall()
+            other_cols = set()
+            for col_name, _ in other_cols_info:
+                other_cols.add(col_name.lower())
+
+            if current_cols == other_cols:
+                vgid = d.get("version_group_id") or d["id"]
+                matches.append({
+                    "dashboard_id": d["id"],
+                    "dashboard_title": d["title"],
+                    "dataset_id": ds_id,
+                    "dataset_name": ds.data[0].get("name", ""),
+                    "version_group_id": vgid,
+                    "version_number": d.get("version_number") or 1,
+                })
+        except Exception:
+            continue
+
+    return {"matches": matches}
 
 
 @router.get("/dashboards/{dashboard_id}")

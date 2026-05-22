@@ -128,6 +128,21 @@ class DashboardUpdate(BaseModel):
     charts: Optional[List[ChartSpec]] = None
 
 
+class VersionCreateRequest(BaseModel):
+    new_dataset_id: str
+    tag: str
+
+class ColumnMatchResult(BaseModel):
+    matches: list[dict]
+
+class VersionInfo(BaseModel):
+    id: str
+    version_number: int
+    tag: Optional[str] = None
+    title: str
+    created_at: str
+    charts_count: int
+
 class QueryRequest(BaseModel):
     dataset_id: str
     query: str

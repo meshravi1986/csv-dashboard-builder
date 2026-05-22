@@ -78,12 +78,18 @@ CREATE TABLE IF NOT EXISTS chart_specs (
     updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
+-- Dashboard versioning columns (run after existing schema)
+ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS version_group_id UUID;
+ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS tag TEXT;
+ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS version_number INTEGER NOT NULL DEFAULT 1;
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_datasets_user_id ON datasets(user_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_fields_dataset_id ON semantic_fields(dataset_id);
 CREATE INDEX IF NOT EXISTS idx_metrics_dataset_id ON metrics(dataset_id);
 CREATE INDEX IF NOT EXISTS idx_dashboards_user_id ON dashboards(user_id);
 CREATE INDEX IF NOT EXISTS idx_dashboards_dataset_id ON dashboards(dataset_id);
+CREATE INDEX IF NOT EXISTS idx_dashboards_version_group_id ON dashboards(version_group_id);
 CREATE INDEX IF NOT EXISTS idx_chart_specs_dashboard_id ON chart_specs(dashboard_id);
 
 -- Enable Row Level Security

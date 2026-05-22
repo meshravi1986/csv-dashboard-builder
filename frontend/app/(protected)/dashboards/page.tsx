@@ -156,13 +156,33 @@ export default function DashboardsPage() {
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
                   </svg>
                 </div>
-                <div>
-                  <p className="text-sm font-medium text-slate-900">{d.title}</p>
-                  <p className="text-xs text-slate-400">{d.charts?.length || 0} charts</p>
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{d.title}</p>
+                  <div className="flex items-center gap-2 mt-0.5">
+                    <p className="text-xs text-slate-400">{d.charts?.length || 0} charts</p>
+                    {(d.version_count || 0) > 1 && (
+                      <>
+                        <span className="text-xs text-slate-300">·</span>
+                        <button
+                          onClick={(e) => { e.stopPropagation(); router.push(`/dashboard-versions/${d.version_group_id}`); }}
+                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                        >
+                          {d.version_count} versions
+                        </button>
+                      </>
+                    )}
+                  </div>
                 </div>
               </div>
-              {d.description && <p className="text-xs text-slate-500 line-clamp-2">{d.description}</p>}
-              <p className="text-xs text-slate-300 mt-3">{new Date(d.created_at).toLocaleDateString()}</p>
+              <div className="flex items-center gap-2">
+                {d.latest_tag && (
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                    {d.latest_tag}
+                  </span>
+                )}
+                {d.description && <p className="text-xs text-slate-500 line-clamp-1 flex-1">{d.description}</p>}
+              </div>
+              <p className="text-xs text-slate-300 mt-2">{new Date(d.created_at).toLocaleDateString()}</p>
             </div>
           ))}
         </div>
@@ -175,6 +195,8 @@ export default function DashboardsPage() {
               <tr className="border-b border-slate-100">
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Name</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Charts</th>
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Versions</th>
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Tag</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Created</th>
                 <th className="w-10 px-5 py-3" />
               </tr>
@@ -191,6 +213,27 @@ export default function DashboardsPage() {
                     {d.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{d.description}</p>}
                   </td>
                   <td className="px-5 py-3.5 text-sm text-slate-500">{d.charts?.length || 0}</td>
+                  <td className="px-5 py-3.5 text-sm text-slate-500">
+                    {(d.version_count || 0) > 1 ? (
+                      <button
+                        onClick={(e) => { e.stopPropagation(); router.push(`/dashboard-versions/${d.version_group_id}`); }}
+                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                      >
+                        {d.version_count} versions
+                      </button>
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
+                  </td>
+                  <td className="px-5 py-3.5 text-sm">
+                    {d.latest_tag ? (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                        {d.latest_tag}
+                      </span>
+                    ) : (
+                      <span className="text-slate-300">-</span>
+                    )}
+                  </td>
                   <td className="px-5 py-3.5 text-sm text-slate-400">{new Date(d.created_at).toLocaleDateString()}</td>
                   <td className="px-5 py-3.5">
                     <button
