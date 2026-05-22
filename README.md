@@ -24,7 +24,8 @@ npm run dev
 
 ## Features
 
-- **Sidebar navigation** — My Dashboards / My Metrics with mobile hamburger toggle
+- **Sidebar navigation** — My Dashboards / My Metrics with mobile hamburger toggle, collapsible for more screen space
+- **Consistent sign-out** — Sign-out always in sidebar footer, never duplicated on pages
 - **Workflow onboarding** — 5-step guide for new users (Upload → Profile → Semantics → Metrics → Dashboard)
 - **AI metric generation** — Describe metrics in natural language, get DuckDB SQL with preview
 - **Reusable metrics** — Select metrics from other datasets when all required fields exist

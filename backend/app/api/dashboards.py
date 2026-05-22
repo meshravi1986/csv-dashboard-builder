@@ -1,14 +1,20 @@
 import uuid
 import json
-from datetime import datetime
+import re
+from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
-from app.schemas.api import DashboardResponse, DashboardListResponse, DashboardUpdate, ChartCreateRequest
+from app.schemas.api import (
+    DashboardResponse, DashboardListResponse, DashboardUpdate, ChartCreateRequest,
+    FilterSuggestResponse, DimensionFilterConfig, DateFilterConfig, DatePreset,
+    ChartDataRequest,
+)
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
+from app.utils.duckdb import get_duckdb
 from app.services.dashboard import build_dashboard
 from app.services.upload import get_parquet_path
-from app.engine.visualization import query_chart_data
+from app.engine.visualization import query_chart_data, query_chart_data_batch
 from app.config import settings
 
 from pydantic import BaseModel
@@ -44,6 +50,10 @@ def generate_dashboard(
     dataset_id: str,
     user: dict = Depends(get_current_user),
 ):
+    import time as time_mod
+    t0 = time_mod.time()
+    print(f"[generate_dashboard] Starting for dataset {dataset_id}", flush=True)
+
     dataset = get_dataset(dataset_id, user["id"])
     supabase = get_supabase()
 
@@ -60,20 +70,14 @@ def generate_dashboard(
         for f in semantic_result.data
     ]
 
-    print(f"Semantic fields: {semantic_fields}", flush=True)
-
     metrics_result = supabase.table("metrics").select("*").eq("dataset_id", dataset_id).execute()
     user_metrics = metrics_result.data or []
-    print(f"User-defined metrics: {len(user_metrics)}", flush=True)
-    for m in user_metrics:
-        print(f"  Metric: name={m.get('name')}, formula={m.get('formula')}, field_name={m.get('field_name')}", flush=True)
 
     parquet_path = get_parquet_path(dataset["parquet_path"])
-    dashboard = build_dashboard(dataset_id, user["id"], semantic_fields, parquet_path, metrics=user_metrics)
+    print(f"[generate_dashboard] Parquet ready at {time_mod.time() - t0:.1f}s", flush=True)
 
-    print(f"Dashboard built: {dashboard['title']} with {len(dashboard['charts'])} charts", flush=True)
-    for c in dashboard["charts"]:
-        print(f"  Chart: type={c['chart_type']}, y={c['y_field']}, formula={c.get('formula')}", flush=True)
+    dashboard = build_dashboard(dataset_id, user["id"], semantic_fields, parquet_path, metrics=user_metrics)
+    print(f"[generate_dashboard] Dashboard built ({len(dashboard['charts'])} charts) at {time_mod.time() - t0:.1f}s", flush=True)
 
     # Delete existing dashboard for this dataset
     existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).execute()
@@ -89,16 +93,14 @@ def generate_dashboard(
 
     def _post_json(url: str, payload: dict, label: str):
         with httpx.Client(timeout=15.0) as client:
-            for attempt in range(3):
+            for attempt in range(2):
                 try:
                     resp = client.post(url, headers=headers, json=payload)
                     if resp.status_code < 400:
                         return resp
-                    if resp.status_code >= 500 and attempt < 2:
-                        continue
                     raise HTTPException(status_code=500, detail=f"{label} failed: {resp.text}")
                 except httpx.TimeoutException:
-                    if attempt < 2:
+                    if attempt < 1:
                         continue
                     raise HTTPException(status_code=500, detail=f"{label} timed out")
 
@@ -113,9 +115,14 @@ def generate_dashboard(
     }
     _post_json(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert")
 
+    # Batch insert all charts in a single POST
+    chart_payloads = []
     for chart in dashboard["charts"]:
-        chart_payload = {
-            "id": str(uuid.uuid4()),
+        chart_id = str(uuid.uuid4())
+        chart["id"] = chart_id
+        chart["dashboard_id"] = db_dashboard_id
+        chart_payloads.append({
+            "id": chart_id,
             "dashboard_id": db_dashboard_id,
             "chart_type": chart["chart_type"],
             "title": chart["title"],
@@ -132,15 +139,15 @@ def generate_dashboard(
             "formula": chart.get("formula"),
             "created_at": now,
             "updated_at": now,
-        }
-        _post_json(f"{SUPABASE_REST_URL}/chart_specs", chart_payload, "Chart insert")
+        })
+    if chart_payloads:
+        _post_json(f"{SUPABASE_REST_URL}/chart_specs", chart_payloads, "Chart batch insert")
 
     dashboard["id"] = db_dashboard_id
-    for c in dashboard["charts"]:
-        c["dashboard_id"] = db_dashboard_id
 
     supabase.table("datasets").update({"status": "ready", "updated_at": now}).eq("id", dataset_id).execute()
 
+    print(f"[generate_dashboard] Done at {time_mod.time() - t0:.1f}s", flush=True)
     return dashboard
 
 
@@ -277,6 +284,125 @@ def get_available_fields(
     }
 
 
+_IDENTIFIER_PATTERN = re.compile(r'^.*_id$|^.*_code$|^.*_uuid$|^id$|^uuid$|^.*_number$|^.*_key$|^.*_sid$', re.IGNORECASE)
+_TEXT_BLOB_PATTERN = re.compile(r'^.*comment.*$|^.*description.*$|^.*note.*$|^.*text.*$|^.*remark.*$', re.IGNORECASE)
+_PRIORITY_FIELDS = {"region", "category", "status", "segment", "channel", "department", "country", "city", "state", "product", "type", "method", "payment", "shipping", "division", "class"}
+
+
+def _generate_date_presets(min_date: str, max_date: str) -> list[DatePreset]:
+    try:
+        min_dt = datetime.strptime(min_date[:10], "%Y-%m-%d")
+        max_dt = datetime.strptime(max_date[:10], "%Y-%m-%d")
+    except ValueError:
+        return [DatePreset(label="Full Range", start=min_date[:10], end=max_date[:10])]
+
+    span_days = (max_dt - min_dt).days
+    today = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    presets = []
+    full_end = max_dt.strftime("%Y-%m-%d")
+
+    presets.append(DatePreset(label="Full Range", start=min_dt.strftime("%Y-%m-%d"), end=full_end))
+
+    def add_preset(label: str, start: datetime):
+        s = start.strftime("%Y-%m-%d")
+        if s >= min_dt.strftime("%Y-%m-%d"):
+            presets.append(DatePreset(label=label, start=s, end=today.strftime("%Y-%m-%d")))
+
+    if span_days <= 30:
+        for label, days in [("Last 7 Days", 7), ("Last 14 Days", 14)]:
+            add_preset(label, today - timedelta(days=days))
+    elif span_days <= 90:
+        for label, days in [("Last 7 Days", 7), ("Last 30 Days", 30), ("Last 90 Days", 90)]:
+            add_preset(label, today - timedelta(days=days))
+    elif span_days <= 365:
+        add_preset("Last 30 Days", today - timedelta(days=30))
+        add_preset("Last 90 Days", today - timedelta(days=90))
+        quarter_start = today.replace(day=1, month=((today.month - 1) // 3) * 3 + 1)
+        add_preset("This Quarter", quarter_start)
+        add_preset("Year To Date", today.replace(month=1, day=1))
+    else:
+        add_preset("Last 30 Days", today - timedelta(days=30))
+        add_preset("Last 90 Days", today - timedelta(days=90))
+        quarter_start = today.replace(day=1, month=((today.month - 1) // 3) * 3 + 1)
+        add_preset("This Quarter", quarter_start)
+        add_preset("Year To Date", today.replace(month=1, day=1))
+        add_preset("This Year", today.replace(month=1, day=1))
+
+    presets.append(DatePreset(label="Custom Range", start="", end=""))
+    return presets
+
+
+@router.get("/dashboards/{dashboard_id}/filters/suggest", response_model=FilterSuggestResponse)
+def suggest_filters(
+    dashboard_id: str,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    dataset_id = dash_result.data[0]["dataset_id"]
+    dataset = supabase.table("datasets").select("parquet_path").eq("id", dataset_id).execute()
+    if not dataset.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+
+    parquet_path = get_parquet_path(dataset.data[0]["parquet_path"])
+    semantic_result = supabase.table("semantic_fields").select("*").eq("dataset_id", dataset_id).execute()
+
+    with get_duckdb() as conn:
+        suggestions = []
+
+        for sf in semantic_result.data:
+            field_name = sf["field_name"]
+            role = sf["role"]
+
+            if role == "measure":
+                continue
+
+            if role == "date":
+                row = conn.execute(f'SELECT MIN("{field_name}"), MAX("{field_name}") FROM \'{parquet_path}\'').fetchone()
+                min_date, max_date = row
+                if not min_date or not max_date:
+                    continue
+                min_str = str(min_date)[:10]
+                max_str = str(max_date)[:10]
+                suggestions.append(DateFilterConfig(
+                    field_name=field_name,
+                    label=field_name.replace("_", " ").title(),
+                    min_date=min_str,
+                    max_date=max_str,
+                    presets=_generate_date_presets(min_str, max_str),
+                ))
+                continue
+
+            # dimension
+            if _IDENTIFIER_PATTERN.match(field_name):
+                continue
+            if _TEXT_BLOB_PATTERN.match(field_name):
+                continue
+
+            cardinality = conn.execute(f'SELECT COUNT(DISTINCT "{field_name}") FROM \'{parquet_path}\'').fetchone()[0]
+            if cardinality > 500:
+                continue
+
+            limit = min(cardinality, 500)
+            rows = conn.execute(f'SELECT DISTINCT "{field_name}" FROM \'{parquet_path}\' WHERE "{field_name}" IS NOT NULL ORDER BY "{field_name}" LIMIT {limit}').fetchall()
+            values = [{"label": str(r[0]), "value": str(r[0])} for r in rows]
+
+            suggestions.append(DimensionFilterConfig(
+                field_name=field_name,
+                label=field_name.replace("_", " ").title(),
+                values=values,
+                cardinality=cardinality,
+            ))
+
+        suggestions.sort(key=lambda f: (0 if f.field_name.lower() in _PRIORITY_FIELDS else 1, getattr(f, 'cardinality', 999)))
+        suggestions = suggestions[:15]
+
+    return {"filters": suggestions}
+
+
 @router.post("/dashboards/{dashboard_id}/charts")
 def add_chart(
     dashboard_id: str,
@@ -369,6 +495,70 @@ def delete_chart(
 
     supabase.table("chart_specs").delete().eq("id", chart_id).eq("dashboard_id", dashboard_id).execute()
     return {"status": "success"}
+
+
+@router.post("/dashboards/{dashboard_id}/charts/{chart_id}/data")
+def get_chart_data_filtered(
+    dashboard_id: str,
+    chart_id: str,
+    request: ChartDataRequest,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    chart_result = supabase.table("chart_specs").select("*").eq("id", chart_id).eq("dashboard_id", dashboard_id).execute()
+    if not chart_result.data:
+        raise HTTPException(status_code=404, detail="Chart not found")
+
+    dataset = supabase.table("datasets").select("parquet_path").eq("id", dash_result.data[0]["dataset_id"]).execute()
+    parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
+
+    filters_dict = {}
+    for f in request.filters:
+        fd = {"type": f.type}
+        if f.type == "dimension":
+            fd["values"] = f.values or []
+        elif f.type == "date":
+            fd["start"] = f.start or ""
+            fd["end"] = f.end or ""
+        filters_dict[f.field_name] = fd
+
+    chart_data = query_chart_data(chart_result.data[0], parquet_path, filters=filters_dict or None)
+    return chart_data
+
+
+@router.post("/dashboards/{dashboard_id}/data")
+def get_dashboard_data_filtered(
+    dashboard_id: str,
+    request: ChartDataRequest,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", dashboard_id).order("order").execute()
+    chart_specs = charts_result.data or []
+
+    dataset = supabase.table("datasets").select("parquet_path").eq("id", dash_result.data[0]["dataset_id"]).execute()
+    parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
+
+    filters_dict = {}
+    for f in request.filters:
+        fd = {"type": f.type}
+        if f.type == "dimension":
+            fd["values"] = f.values or []
+        elif f.type == "date":
+            fd["start"] = f.start or ""
+            fd["end"] = f.end or ""
+        filters_dict[f.field_name] = fd
+
+    all_data = query_chart_data_batch(chart_specs, parquet_path, filters=filters_dict or None)
+    return {chart["id"]: data for chart, data in zip(chart_specs, all_data)}
 
 
 @router.put("/dashboards/{dashboard_id}/charts/reorder")

@@ -37,7 +37,7 @@ export default function LoginPage() {
           options: { data: { full_name: name } },
         });
         if (signUpError) throw signUpError;
-        if (data.session) router.push("/upload");
+        if (data.session) router.push("/dashboards");
       } else {
         const { data, error: signInError } =
           await supabase.auth.signInWithPassword({
@@ -45,7 +45,7 @@ export default function LoginPage() {
             password: pin,
           });
         if (signInError) throw signInError;
-        if (data.session) router.push("/upload");
+        if (data.session) router.push("/dashboards");
       }
     } catch (err: any) {
       setError(err.message || "Authentication failed");

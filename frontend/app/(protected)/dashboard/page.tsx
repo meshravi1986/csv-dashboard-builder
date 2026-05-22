@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { api } from "@/services/api";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
@@ -13,23 +13,31 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [elapsed, setElapsed] = useState(0);
+  const timerRef = useRef<any>(null);
 
   useEffect(() => {
     if (!datasetId) {
-      router.push("/upload");
+      router.push("/dashboards");
       return;
     }
     generateDashboard();
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
   }, [datasetId, router]);
 
   const generateDashboard = async () => {
     if (!datasetId) return;
     setGenerating(true);
     setError(null);
+    setElapsed(0);
+    timerRef.current = setInterval(() => setElapsed((s) => s + 1), 1000);
     try {
       const result = await api.generateDashboard(datasetId);
+      clearInterval(timerRef.current);
+      setDashboard(result);
       router.push(`/dashboard/${result.id}`);
     } catch (err: any) {
+      clearInterval(timerRef.current);
       setError(err.message || "Dashboard generation failed");
     } finally {
       setGenerating(false);
@@ -51,6 +59,7 @@ export default function DashboardPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-12">
           <div className="flex flex-col items-center gap-4">
             <div className="animate-spin rounded-full h-10 w-10 border-b-2 border-slate-900" />
+            <p className="text-sm text-slate-400">{elapsed}s elapsed</p>
             <div className="space-y-2 text-center">
               <div className="h-4 w-48 bg-slate-100 rounded animate-pulse mx-auto" />
               <div className="h-3 w-32 bg-slate-100 rounded animate-pulse mx-auto" />
@@ -65,20 +74,6 @@ export default function DashboardPage() {
     return (
       <div className="text-center py-20">
         <p className="text-sm text-red-600 mb-2">{error}</p>
-        <button
-          onClick={generateDashboard}
-          className="mt-4 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg"
-        >
-          Try Again
-        </button>
-      </div>
-    );
-  }
-
-  if (!dashboard) {
-    return (
-      <div className="text-center py-20">
-        <p className="text-sm text-slate-500">No dashboard generated</p>
         <button
           onClick={generateDashboard}
           className="mt-4 px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg"

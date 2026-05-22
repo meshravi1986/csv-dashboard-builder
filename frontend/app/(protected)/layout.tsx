@@ -15,6 +15,12 @@ export default function ProtectedLayout({
   const [user, setUser] = useState<AuthUser | null>(null);
   const [loading, setLoading] = useState(true);
   const [sidebarOpen, setSidebarOpen] = useState(false);
+  const [collapsed, setCollapsed] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("sidebar_collapsed");
+    if (stored === "true") setCollapsed(true);
+  }, []);
 
   useEffect(() => {
     const getUser = async () => {
@@ -30,6 +36,14 @@ export default function ProtectedLayout({
     };
     getUser();
   }, [router]);
+
+  const toggleCollapsed = () => {
+    setCollapsed((prev) => {
+      const next = !prev;
+      localStorage.setItem("sidebar_collapsed", String(next));
+      return next;
+    });
+  };
 
   if (loading || !user) {
     return (
@@ -51,52 +65,68 @@ export default function ProtectedLayout({
 
   return (
     <div className="min-h-screen bg-slate-50 flex">
-      <aside className={`fixed inset-y-0 left-0 z-30 w-64 bg-white border-r border-slate-200 transform transition-transform lg:translate-x-0 lg:static lg:inset-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"}`}>
+      <aside className={`fixed inset-y-0 left-0 z-30 bg-white border-r border-slate-200 transform transition-all lg:translate-x-0 lg:static lg:inset-auto ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} ${collapsed ? "w-16" : "w-64"}`}>
         <div className="flex flex-col h-full">
-          <div className="flex items-center gap-2 px-6 h-16 border-b border-slate-200 cursor-pointer" onClick={() => router.push("/dashboards")}>
-            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center">
+          <div className={`flex items-center h-16 border-b border-slate-200 cursor-pointer ${collapsed ? "justify-center px-0" : "gap-2 px-6"}`} onClick={() => router.push("/dashboards")}>
+            <div className="w-8 h-8 rounded-lg bg-slate-900 flex items-center justify-center shrink-0">
               <svg className="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 17v-2m3 2v-4m3 4v-6m2 10H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
             </div>
-            <span className="font-semibold text-slate-900">CSV Dashboard Builder</span>
+            {!collapsed && <span className="font-semibold text-slate-900 truncate">CSV Dashboard Builder</span>}
           </div>
 
-          <nav className="flex-1 px-3 py-4 space-y-1">
+          <nav className="flex-1 px-2 py-4 space-y-1">
             {navItems.map((item) => {
               const isActive = pathname === item.path || (item.path !== "/" && pathname.startsWith(item.path));
               return (
                 <button
                   key={item.path}
                   onClick={() => { router.push(item.path); setSidebarOpen(false); }}
-                  className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors ${
-                    isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
-                  }`}
+                  className={`w-full flex items-center rounded-lg text-sm font-medium transition-colors ${
+                    collapsed ? "justify-center px-0 py-2.5" : "gap-3 px-3 py-2.5"
+                  } ${isActive ? "bg-slate-900 text-white" : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"}`}
+                  title={collapsed ? item.label : undefined}
                 >
-                  <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <svg className="w-5 h-5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d={item.icon} />
                   </svg>
-                  {item.label}
+                  {!collapsed && item.label}
                 </button>
               );
             })}
           </nav>
 
-          <div className="px-3 py-4 border-t border-slate-200">
-            <div className="flex items-center gap-3 px-3 py-2">
+          <div className="px-2 py-4 border-t border-slate-200">
+            <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3 px-3"} py-2`}>
               {user.avatar_url && (
-                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full shrink-0" />
               )}
-              <div className="flex-1 min-w-0">
-                <p className="text-sm font-medium text-slate-900 truncate">{user.name}</p>
-                <p className="text-xs text-slate-400 truncate">{user.email}</p>
-              </div>
+              {!collapsed && (
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-900 truncate">{user.name}</p>
+                  <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                </div>
+              )}
             </div>
             <button
               onClick={handleLogout}
-              className="w-full mt-1 px-3 py-2 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors text-left"
+              className={`w-full mt-1 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ${collapsed ? "px-0 py-2" : "px-3 py-2 text-left"}`}
+              title={collapsed ? "Sign out" : undefined}
             >
-              Sign out
+              <svg className={`w-5 h-5 mx-auto ${collapsed ? "" : "hidden"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              {!collapsed && "Sign out"}
+            </button>
+            <button
+              onClick={toggleCollapsed}
+              className="w-full mt-1 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+              title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
+            >
+              <svg className={`w-4 h-4 transition-transform ${collapsed ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+              </svg>
             </button>
           </div>
         </div>

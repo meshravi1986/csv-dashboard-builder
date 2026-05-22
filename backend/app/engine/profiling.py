@@ -1,9 +1,14 @@
 import polars as pl
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 from app.utils.duckdb import get_profile_stats
 
+_profile_cache: Dict[str, Dict[str, Any]] = {}
 
-def profile_dataset(parquet_path: str) -> Dict[str, Any]:
+
+def profile_dataset(parquet_path: str, dataset_id: Optional[str] = None) -> Dict[str, Any]:
+    if dataset_id and dataset_id in _profile_cache:
+        return _profile_cache[dataset_id]
+
     profile = get_profile_stats(parquet_path)
 
     total_nulls = sum(f.get("null_count", 0) for f in profile.get("fields", []))
@@ -25,7 +30,14 @@ def profile_dataset(parquet_path: str) -> Dict[str, Any]:
 
         field["is_date"] = field["detected_type"] == "date"
 
+    if dataset_id:
+        _profile_cache[dataset_id] = profile
+
     return profile
+
+
+def clear_profile_cache(dataset_id: str):
+    _profile_cache.pop(dataset_id, None)
 
 
 def count_rows(parquet_path: str) -> int:

@@ -39,7 +39,7 @@ def get_dataset_profile(
 ):
     dataset = get_dataset(dataset_id, user["id"])
     parquet_path = get_parquet_path(dataset["parquet_path"])
-    profile = profile_dataset(parquet_path)
+    profile = profile_dataset(parquet_path, dataset_id=dataset_id)
 
     supabase = get_supabase()
     supabase.table("datasets").update({"status": "profiled", "updated_at": datetime.utcnow().isoformat()}).eq("id", dataset_id).execute()
@@ -60,7 +60,7 @@ def suggest_semantics(
 ):
     dataset = get_dataset(dataset_id, user["id"])
     parquet_path = get_parquet_path(dataset["parquet_path"])
-    profile = profile_dataset(parquet_path)
+    profile = profile_dataset(parquet_path, dataset_id=dataset_id)
 
     ai_suggestions = get_ai_semantic_suggestions(profile)
 
@@ -122,7 +122,7 @@ def suggest_metric_sql(
 
     dataset = get_dataset(dataset_id, user["id"])
     parquet_path = get_parquet_path(dataset["parquet_path"])
-    profile = profile_dataset(parquet_path)
+    profile = profile_dataset(parquet_path, dataset_id=dataset_id)
     sql = suggest_sql(profile, request.description)
     if not sql:
         raise HTTPException(status_code=500, detail="Failed to generate SQL")

@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 from app.config import settings
 from app.prompts.chart import CHART_TITLE_PROMPT, DASHBOARD_COMPOSITION_PROMPT
-from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data
+from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch
 
 _has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
 client = OpenAI(api_key=settings.openai_api_key, timeout=10.0) if _has_valid_key else None
@@ -147,9 +147,10 @@ def build_dashboard(
     now = datetime.utcnow().isoformat()
 
     charts = []
+    all_chart_data = query_chart_data_batch(chart_specs, parquet_path) if parquet_path else [{"labels": [], "values": []} for _ in chart_specs]
     for i, spec in enumerate(chart_specs):
         chart_id = str(uuid.uuid4())
-        chart_data = query_chart_data(spec, parquet_path) if parquet_path else {"labels": [], "values": []}
+        chart_data = all_chart_data[i] if i < len(all_chart_data) else {"labels": [], "values": []}
         charts.append({
             "id": chart_id,
             "dashboard_id": dashboard_id,

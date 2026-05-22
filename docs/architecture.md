@@ -18,15 +18,21 @@ Two metric sources:
 ## Navigation
 
 ```
-Sidebar
+Sidebar (collapsible to icon-only)
 ├── My Dashboards  (/dashboards)
 └── My Metrics     (/my-metrics)
+└── User info + Sign out (footer)
 
 Dashboard Detail
 ├── Chart area (sortable by drag & drop)
 ├── Add chart panel
+├── Filter bar (global dimension/date filters)
 └── Edit workspace (back to semantics)
 ```
+
+Sidebar can be collapsed to a narrow icon strip via the chevron button at the bottom.
+Collapse state persists in localStorage. Sign-out is always in the sidebar footer
+for consistency across all protected pages.
 
 ## Key Design Decisions
 

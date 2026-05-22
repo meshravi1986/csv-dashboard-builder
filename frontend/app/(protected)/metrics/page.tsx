@@ -44,7 +44,7 @@ export default function MetricsPage() {
 
   useEffect(() => {
     if (!datasetId) {
-      router.push("/upload");
+      router.push("/dashboards");
       return;
     }
 
@@ -541,12 +541,20 @@ export default function MetricsPage() {
         <div className="bg-white rounded-xl border border-slate-200 p-6 space-y-4">
           <div className="flex items-center justify-between">
             <h3 className="text-sm font-medium text-slate-900">Select Metric from Other Datasets</h3>
-            <button
-              onClick={() => { setShowSelectPanel(false); setAvailableMetrics([]); }}
-              className="text-sm text-slate-400 hover:text-slate-600"
-            >
-              Close
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => { setShowSelectPanel(false); }}
+                className="px-3 py-1.5 bg-slate-900 text-white text-xs font-medium rounded-lg hover:bg-slate-800 transition-colors"
+              >
+                Done
+              </button>
+              <button
+                onClick={() => { setShowSelectPanel(false); setAvailableMetrics([]); }}
+                className="text-sm text-slate-400 hover:text-slate-600"
+              >
+                Close
+              </button>
+            </div>
           </div>
 
           {loadingAvailable ? (

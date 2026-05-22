@@ -1,6 +1,7 @@
 from typing import Any, Dict, List, Optional
 import json
-from app.utils.duckdb import query_parquet, get_duckdb
+import duckdb
+from app.utils.duckdb import get_duckdb
 
 
 DETERMINISTIC_CHART_RULES = {
@@ -145,74 +146,102 @@ def generate_dashboard_title(
     return "Data Dashboard"
 
 
-def query_chart_data(chart_spec: Dict[str, Any], parquet_path: str) -> Dict[str, Any]:
+def _build_filter_sql(filters: Optional[Dict[str, Any]] = None) -> str:
+    if not filters:
+        return ""
+    conditions = []
+    for field_name, fdef in filters.items():
+        if fdef.get("type") == "dimension" and fdef.get("values"):
+            vals = fdef["values"]
+            quoted = [f"'{v.replace(chr(39), chr(39)*2)}'" for v in vals]
+            conditions.append(f"\"{field_name}\" IN ({','.join(quoted)})")
+        elif fdef.get("type") == "date":
+            start = fdef.get("start")
+            end = fdef.get("end")
+            if start and end:
+                conditions.append(f"\"{field_name}\" BETWEEN '{start}' AND '{end}'")
+            elif start:
+                conditions.append(f"\"{field_name}\" >= '{start}'")
+            elif end:
+                conditions.append(f"\"{field_name}\" <= '{end}'")
+    if not conditions:
+        return ""
+    return " AND " + " AND ".join(conditions)
+
+
+def query_chart_data(chart_spec: Dict[str, Any], parquet_path: str, filters: Optional[Dict[str, Any]] = None, conn: Optional[duckdb.DuckDBPyConnection] = None) -> Dict[str, Any]:
+    if conn is None:
+        with get_duckdb() as c:
+            return _query_chart_data_with_conn(chart_spec, parquet_path, filters, c)
+    return _query_chart_data_with_conn(chart_spec, parquet_path, filters, conn)
+
+
+def query_chart_data_batch(chart_specs: List[Dict[str, Any]], parquet_path: str, filters: Optional[Dict[str, Any]] = None) -> List[Dict[str, Any]]:
     with get_duckdb() as conn:
-        x_field = chart_spec["x_field"]
-        y_field = chart_spec["y_field"]
-        aggregation = chart_spec.get("aggregation") or "SUM"
-        chart_type = chart_spec["chart_type"]
-        formula = chart_spec.get("formula")
+        return [_query_chart_data_with_conn(spec, parquet_path, filters, conn) for spec in chart_specs]
 
-        print(f"query_chart_data: type={chart_type}, x={x_field}, y={y_field}, agg={aggregation}, formula={formula}, path={parquet_path}", flush=True)
 
-        def agg_fn(expr: str) -> str:
-            if aggregation == "COUNT_DISTINCT":
-                return f"COUNT(DISTINCT {expr})"
-            return f"{aggregation}({expr})"
+def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, filters: Optional[Dict[str, Any]], conn: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
+    x_field = chart_spec["x_field"]
+    y_field = chart_spec["y_field"]
+    aggregation = chart_spec.get("aggregation") or "SUM"
+    chart_type = chart_spec["chart_type"]
+    formula = chart_spec.get("formula")
 
-        def is_pre_aggregated(expr: str) -> bool:
-            aggs = {"SUM(", "AVG(", "COUNT(", "MIN(", "MAX("}
-            return any(agg in expr.upper() for agg in aggs)
+    filter_sql = _build_filter_sql(filters)
 
-        def value_expr():
-            if formula:
-                if is_pre_aggregated(formula):
-                    return formula
-                return agg_fn(formula)
-            if not y_field:
-                return "0"
-            return agg_fn(f"\"{y_field}\"")
+    def agg_fn(expr: str) -> str:
+        if aggregation == "COUNT_DISTINCT":
+            return f"COUNT(DISTINCT {expr})"
+        return f"{aggregation}({expr})"
 
-        def raw_expr():
-            if formula:
+    def is_pre_aggregated(expr: str) -> bool:
+        aggs = {"SUM(", "AVG(", "COUNT(", "MIN(", "MAX("}
+        return any(agg in expr.upper() for agg in aggs)
+
+    def value_expr():
+        if formula:
+            if is_pre_aggregated(formula):
                 return formula
-            return f"\"{y_field}\""
+            return agg_fn(formula)
+        if not y_field:
+            return "0"
+        return agg_fn(f"\"{y_field}\"")
 
-        try:
-            if chart_type == "kpi":
-                sql = f"SELECT COALESCE({value_expr()}, 0) as value FROM '{parquet_path}'"
-                print(f"KPI SQL: {sql}", flush=True)
-                result = conn.execute(sql).fetchone()
-                val = float(result[0]) if result else 0
-                print(f"KPI result: {val}", flush=True)
-                return {"labels": [], "values": [val]}
+    def raw_expr():
+        if formula:
+            return formula
+        return f"\"{y_field}\""
 
-            if chart_type == "pie":
-                sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 20"
-                result = conn.execute(sql).fetchall()
-                return {
-                    "labels": [str(r[0]) for r in result],
-                    "values": [float(r[1]) if r[1] is not None else 0 for r in result],
-                }
+    try:
+        if chart_type == "kpi":
+            sql = f"SELECT COALESCE({value_expr()}, 0) as value FROM '{parquet_path}'{' WHERE 1=1' + filter_sql if filter_sql else ''}"
+            result = conn.execute(sql).fetchone()
+            val = float(result[0]) if result else 0
+            return {"labels": [], "values": [val]}
 
-            if chart_type == "scatter":
-                sql = f"SELECT \"{x_field}\" as x, {raw_expr()} as y FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL AND {raw_expr()} IS NOT NULL LIMIT 1000"
-                print(f"Scatter SQL: {sql}", flush=True)
-                result = conn.execute(sql).fetchall()
-                print(f"Scatter rows: {len(result)}", flush=True)
-                return {
-                    "labels": [],
-                    "values": [{"x": r[0], "y": r[1]} for r in result],
-                }
-
-            sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 50"
-            print(f"SQL: {sql}", flush=True)
+        if chart_type == "pie":
+            sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL{filter_sql} GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 20"
             result = conn.execute(sql).fetchall()
-            print(f"Rows: {len(result)}", flush=True)
             return {
                 "labels": [str(r[0]) for r in result],
                 "values": [float(r[1]) if r[1] is not None else 0 for r in result],
             }
-        except Exception as e:
-            print(f"Query error for chart_type={chart_type}: {e}", flush=True)
-            return {"labels": [], "values": []}
+
+        if chart_type == "scatter":
+            sql = f"SELECT \"{x_field}\" as x, {raw_expr()} as y FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL AND {raw_expr()} IS NOT NULL{filter_sql} LIMIT 1000"
+            result = conn.execute(sql).fetchall()
+            return {
+                "labels": [],
+                "values": [{"x": r[0], "y": r[1]} for r in result],
+            }
+
+        sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL{filter_sql} GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 50"
+        result = conn.execute(sql).fetchall()
+        return {
+            "labels": [str(r[0]) for r in result],
+            "values": [float(r[1]) if r[1] is not None else 0 for r in result],
+        }
+    except Exception as e:
+        print(f"Query error for chart_type={chart_type}, filters={filters}: {e}", flush=True)
+        return {"labels": [], "values": []}

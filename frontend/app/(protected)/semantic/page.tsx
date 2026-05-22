@@ -21,7 +21,7 @@ export default function SemanticPage() {
 
   useEffect(() => {
     if (!datasetId) {
-      router.push("/upload");
+      router.push("/dashboards");
       return;
     }
 

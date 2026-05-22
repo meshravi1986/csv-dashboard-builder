@@ -1,5 +1,7 @@
 const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
+const FETCH_TIMEOUT = 30000;
+
 class ApiService {
   private baseUrl: string;
 
@@ -18,6 +20,16 @@ class ApiService {
         ? { Authorization: `Bearer ${session.access_token}` }
         : {}),
     };
+  }
+
+  private async apiFetch(input: RequestInfo | URL, init?: RequestInit, timeoutMs = FETCH_TIMEOUT): Promise<Response> {
+    const controller = new AbortController();
+    const id = setTimeout(() => controller.abort(), timeoutMs);
+    try {
+      return await fetch(input, { ...init, signal: controller.signal });
+    } finally {
+      clearTimeout(id);
+    }
   }
 
   async uploadCSV(file: File, onProgress?: (progress: number) => void) {
@@ -58,9 +70,7 @@ class ApiService {
 
   async getProfile(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/profile`, {
-      headers,
-    });
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/profile`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Profile fetch failed" }));
       throw new Error(err.detail || "Profile fetch failed");
@@ -70,7 +80,7 @@ class ApiService {
 
   async updateSemantics(datasetId: string, fields: any[]) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/semantics`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/semantics`, {
       method: "PUT",
       headers,
       body: JSON.stringify({ fields }),
@@ -84,10 +94,7 @@ class ApiService {
 
   async getSemanticSuggestions(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(
-      `${this.baseUrl}/datasets/${datasetId}/semantics/suggest`,
-      { headers }
-    );
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/semantics/suggest`, { headers });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Suggestions failed" }));
       throw new Error(err.detail || "Suggestions failed");
@@ -97,21 +104,50 @@ class ApiService {
 
   async getAllMetrics() {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/metrics/all`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/metrics/all`, { headers });
     if (!res.ok) throw new Error("Metrics fetch failed");
+    return res.json();
+  }
+
+  async getChartDataFiltered(dashboardId: string, chartId: string, filters: any[]) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/${chartId}/data`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ filters }),
+    });
+    if (!res.ok) throw new Error("Chart data fetch failed");
+    return res.json();
+  }
+
+  async getAllChartDataFiltered(dashboardId: string, filters: any[]) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/data`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ filters }),
+    });
+    if (!res.ok) throw new Error("Batch chart data fetch failed");
+    return res.json();
+  }
+
+  async suggestFilters(dashboardId: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/filters/suggest`, { headers });
+    if (!res.ok) throw new Error("Filter suggestions failed");
     return res.json();
   }
 
   async getAvailableMetrics(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/available`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics/available`, { headers });
     if (!res.ok) throw new Error("Available metrics fetch failed");
     return res.json();
   }
 
   async getMetrics(datasetId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {
       headers,
     });
     if (!res.ok) throw new Error("Metrics fetch failed");
@@ -120,7 +156,7 @@ class ApiService {
 
   async createMetric(datasetId: string, metric: any) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics`, {
       method: "POST",
       headers,
       body: JSON.stringify(metric),
@@ -134,7 +170,7 @@ class ApiService {
 
   async updateMetric(datasetId: string, metricId: string, metric: any) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/${metricId}`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics/${metricId}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(metric),
@@ -148,7 +184,7 @@ class ApiService {
 
   async suggestSQL(datasetId: string, description: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/suggest-sql`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics/suggest-sql`, {
       method: "POST",
       headers,
       body: JSON.stringify({ description }),
@@ -159,7 +195,7 @@ class ApiService {
 
   async previewSQL(datasetId: string, sql: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/preview-sql`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics/preview-sql`, {
       method: "POST",
       headers,
       body: JSON.stringify({ sql }),
@@ -170,7 +206,7 @@ class ApiService {
 
   async deleteMetric(datasetId: string, metricId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/datasets/${datasetId}/metrics/${metricId}`, {
+    const res = await this.apiFetch(`${this.baseUrl}/datasets/${datasetId}/metrics/${metricId}`, {
       method: "DELETE",
       headers,
     });
@@ -181,47 +217,40 @@ class ApiService {
   async generateDashboard(datasetId: string) {
     const headers = await this.getAuthHeaders();
     for (let attempt = 0; attempt < 3; attempt++) {
-      const controller = new AbortController();
-      const timeout = setTimeout(() => controller.abort(), 60000);
       try {
-        const res = await fetch(
+        const res = await this.apiFetch(
           `${this.baseUrl}/datasets/${datasetId}/dashboard/generate`,
-          {
-            method: "POST",
-            headers,
-            signal: controller.signal,
-          }
+          { method: "POST", headers },
+          120000
         );
         if (res.ok) return res.json();
         const err = await res.json().catch(() => ({ detail: "Dashboard generation failed" }));
         if (attempt < 2 && res.status >= 500) continue;
         throw new Error(err.detail || "Dashboard generation failed");
       } catch (e: any) {
-        if (attempt < 2 && (e.name === "AbortError" || e.message?.includes("fetch failed"))) continue;
+        if (attempt < 2 && (e.name === "AbortError" || e.message?.includes("fetch failed") || e.message?.includes("The operation was aborted"))) continue;
         throw e;
-      } finally {
-        clearTimeout(timeout);
       }
     }
   }
 
   async getDashboards() {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards`, { headers });
     if (!res.ok) throw new Error("Dashboards fetch failed");
     return res.json();
   }
 
   async getDashboard(id: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${id}`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${id}`, { headers });
     if (!res.ok) throw new Error("Dashboard fetch failed");
     return res.json();
   }
 
   async updateDashboard(id: string, data: any) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${id}`, {
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${id}`, {
       method: "PUT",
       headers,
       body: JSON.stringify(data),
@@ -235,14 +264,14 @@ class ApiService {
 
   async getAvailableFields(dashboardId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${dashboardId}/available-fields`, { headers });
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/available-fields`, { headers });
     if (!res.ok) throw new Error("Fields fetch failed");
     return res.json();
   }
 
   async addChart(dashboardId: string, chart: any) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${dashboardId}/charts`, {
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/charts`, {
       method: "POST",
       headers,
       body: JSON.stringify(chart),
@@ -256,7 +285,7 @@ class ApiService {
 
   async deleteChart(dashboardId: string, chartId: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/${chartId}`, {
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/${chartId}`, {
       method: "DELETE",
       headers,
     });
@@ -266,7 +295,7 @@ class ApiService {
 
   async reorderCharts(dashboardId: string, chartIds: string[]) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/reorder`, {
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/charts/reorder`, {
       method: "PUT",
       headers,
       body: JSON.stringify({ chart_ids: chartIds }),
@@ -277,7 +306,7 @@ class ApiService {
 
   async deleteDashboard(id: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/dashboards/${id}`, {
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${id}`, {
       method: "DELETE",
       headers,
     });
@@ -287,7 +316,7 @@ class ApiService {
 
   async queryParquet(datasetId: string, query: string) {
     const headers = await this.getAuthHeaders();
-    const res = await fetch(`${this.baseUrl}/query`, {
+    const res = await this.apiFetch(`${this.baseUrl}/query`, {
       method: "POST",
       headers,
       body: JSON.stringify({ dataset_id: datasetId, query }),

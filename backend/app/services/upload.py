@@ -74,6 +74,8 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
 
 def get_parquet_path(parquet_storage_path: str) -> str:
     temp_path = TEMP_DIR / Path(parquet_storage_path).name
+    if temp_path.exists() and temp_path.stat().st_size > 0:
+        return str(temp_path)
     try:
         storage = get_supabase_storage()
         data = storage.download(parquet_storage_path)

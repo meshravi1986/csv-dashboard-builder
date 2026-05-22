@@ -1,5 +1,5 @@
 from pydantic import BaseModel, Field
-from typing import List, Optional, Any, Literal
+from typing import List, Optional, Any, Literal, Dict
 from datetime import datetime
 
 
@@ -171,3 +171,50 @@ class PreviewSQLRequest(BaseModel):
 class PreviewSQLResponse(BaseModel):
     value: Optional[Any] = None
     error: Optional[str] = None
+
+
+class DatePreset(BaseModel):
+    label: str
+    start: str
+    end: str
+
+
+class DimensionFilterConfig(BaseModel):
+    field_name: str
+    label: str
+    type: Literal["dimension"] = "dimension"
+    values: List[dict]
+    cardinality: int
+
+
+class DateFilterConfig(BaseModel):
+    field_name: str
+    label: str
+    type: Literal["date"] = "date"
+    min_date: str
+    max_date: str
+    presets: List[DatePreset]
+
+
+class FilterSuggestResponse(BaseModel):
+    filters: List[DimensionFilterConfig | DateFilterConfig]
+
+
+class ActiveFilter(BaseModel):
+    field_name: str
+    type: Literal["dimension", "date"]
+    values: Optional[List[str]] = None
+    start: Optional[str] = None
+    end: Optional[str] = None
+
+
+class ChartDataRequest(BaseModel):
+    filters: List[ActiveFilter] = []
+
+
+class BatchChartDataRequest(BaseModel):
+    filters: List[ActiveFilter] = []
+
+
+class BatchChartDataResponse(BaseModel):
+    charts: Dict[str, Any]

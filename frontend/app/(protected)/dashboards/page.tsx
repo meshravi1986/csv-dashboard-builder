@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { api } from "@/services/api";
+import ProductTour from "@/components/onboarding/product-tour";
 
 const steps = [
   { number: 1, title: "Upload CSV", desc: "Import your data — CSV or spreadsheet files", icon: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" },
@@ -17,6 +18,15 @@ export default function DashboardsPage() {
   const [dashboards, setDashboards] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [deleting, setDeleting] = useState<string | null>(null);
+  const [workflowDismissed, setWorkflowDismissed] = useState(false);
+  const [showTour, setShowTour] = useState(false);
+
+  useEffect(() => {
+    const dismissed = localStorage.getItem("workflow_dismissed");
+    if (dismissed === "true") setWorkflowDismissed(true);
+    const tourDismissed = localStorage.getItem("tour_dismissed");
+    if (tourDismissed !== "true") setShowTour(true);
+  }, []);
 
   useEffect(() => {
     const load = async () => {
@@ -31,6 +41,11 @@ export default function DashboardsPage() {
     };
     load();
   }, []);
+
+  const dismissWorkflow = () => {
+    setWorkflowDismissed(true);
+    localStorage.setItem("workflow_dismissed", "true");
+  };
 
   const handleDelete = async (e: React.MouseEvent, id: string) => {
     e.stopPropagation();
@@ -54,73 +69,37 @@ export default function DashboardsPage() {
     );
   }
 
+  const showWorkflow = dashboards.length < 3 && !workflowDismissed;
+
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold text-slate-900">
-            My Dashboards
-          </h1>
+          <h1 className="text-2xl font-semibold text-slate-900">My Dashboards</h1>
           <p className="text-sm text-slate-500 mt-1">
-            {dashboards.length === 0
-              ? "Get started by uploading your first CSV file"
-              : "Your saved dashboards"}
+            {dashboards.length === 0 ? "Get started by uploading your first CSV file" : "Your saved dashboards"}
           </p>
         </div>
-        <button
-          onClick={() => router.push("/upload")}
-          className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
-        >
-          New Dashboard
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => setShowTour(true)}
+            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
+            title="Show tour"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+          </button>
+          <button
+            onClick={() => router.push("/upload")}
+            className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors"
+          >
+            New Dashboard
+          </button>
+        </div>
       </div>
 
-      {dashboards.length === 0 ? (
-        <div className="space-y-8">
-          <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
-            <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-100 mb-4">
-              <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
-              </svg>
-            </div>
-            <p className="text-sm text-slate-500 font-medium">No dashboards yet</p>
-            <p className="text-xs text-slate-400 mt-1">
-              Follow the workflow below to create your first dashboard
-            </p>
-          </div>
-
-          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
-            {steps.map((step, i) => (
-              <div key={step.number} className="bg-white rounded-xl border border-slate-200 p-5 relative">
-                {i < steps.length - 1 && (
-                  <div className="hidden lg:block absolute top-11 -right-3 z-10">
-                    <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
-                    </svg>
-                  </div>
-                )}
-                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center text-sm font-semibold mb-3">
-                  {step.number}
-                </div>
-                <h3 className="text-sm font-semibold text-slate-900 mb-1">{step.title}</h3>
-                <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
-              </div>
-            ))}
-          </div>
-
-          <div className="text-center">
-            <button
-              onClick={() => router.push("/upload")}
-              className="px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
-            >
-              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
-              </svg>
-              Upload your first CSV
-            </button>
-          </div>
-        </div>
-      ) : (
+      {dashboards.length > 0 && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {dashboards.map((d) => (
             <div
@@ -148,14 +127,68 @@ export default function DashboardsPage() {
                   <p className="text-xs text-slate-400">{d.charts?.length || 0} charts</p>
                 </div>
               </div>
-              {d.description && (
-                <p className="text-xs text-slate-500 line-clamp-2">{d.description}</p>
-              )}
+              {d.description && <p className="text-xs text-slate-500 line-clamp-2">{d.description}</p>}
               <p className="text-xs text-slate-300 mt-3">{new Date(d.created_at).toLocaleDateString()}</p>
             </div>
           ))}
         </div>
       )}
+
+      {dashboards.length === 0 && (
+        <div className="text-center py-12 bg-white rounded-xl border border-slate-200">
+          <div className="inline-flex items-center justify-center w-12 h-12 rounded-xl bg-slate-100 mb-4">
+            <svg className="w-6 h-6 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M4 5a1 1 0 011-1h14a1 1 0 011 1v2a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM4 13a1 1 0 011-1h6a1 1 0 011 1v6a1 1 0 01-1 1H5a1 1 0 01-1-1v-6zM16 13a1 1 0 011-1h2a1 1 0 011 1v6a1 1 0 01-1 1h-2a1 1 0 01-1-1v-6z" />
+            </svg>
+          </div>
+          <p className="text-sm text-slate-500 font-medium">No dashboards yet</p>
+          <p className="text-xs text-slate-400 mt-1">Follow the workflow below to create your first dashboard</p>
+          <button
+            onClick={() => router.push("/upload")}
+            className="mt-4 px-6 py-3 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors inline-flex items-center gap-2"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4v16m8-8H4" />
+            </svg>
+            Upload your first CSV
+          </button>
+        </div>
+      )}
+
+      {showWorkflow && (
+        <div className="relative bg-white rounded-xl border border-slate-200 p-6">
+          <button
+            onClick={dismissWorkflow}
+            className="absolute top-4 right-4 p-1 text-slate-400 hover:text-slate-600 transition-colors"
+            title="Dismiss"
+          >
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+            </svg>
+          </button>
+          <h3 className="text-sm font-medium text-slate-700 mb-4">How it works</h3>
+          <div className="grid grid-cols-1 sm:grid-cols-3 lg:grid-cols-5 gap-4">
+            {steps.map((step, i) => (
+              <div key={step.number} className="relative">
+                {i < steps.length - 1 && (
+                  <div className="hidden lg:block absolute top-5 -right-3 z-10">
+                    <svg className="w-5 h-5 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                    </svg>
+                  </div>
+                )}
+                <div className="w-10 h-10 rounded-xl bg-slate-900 text-white flex items-center justify-center text-sm font-semibold mb-3">
+                  {step.number}
+                </div>
+                <h4 className="text-sm font-semibold text-slate-900 mb-1">{step.title}</h4>
+                <p className="text-xs text-slate-500 leading-relaxed">{step.desc}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {showTour && <ProductTour onClose={() => setShowTour(false)} />}
     </div>
   );
 }

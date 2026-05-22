@@ -15,7 +15,7 @@ export default function ProfilePage() {
 
   useEffect(() => {
     if (!datasetId) {
-      router.push("/upload");
+      router.push("/dashboards");
       return;
     }
 

@@ -16,14 +16,13 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
 
   const labels = chart.data?.labels || [];
   const values = chart.data?.values || [];
-
-  console.log(`ChartCard[${chart.chart_type}] data:`, JSON.stringify({ labels: labels.slice(0, 5), values: values.slice(0, 5) }));
-  console.log(`ChartCard[${chart.chart_type}] raw data field:`, chart.data === undefined ? "UNDEFINED" : chart.data === null ? "NULL" : "EXISTS");
+  const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
 
   const getChartOption = () => {
 
     const base = {
       backgroundColor: "transparent",
+      animation: false,
       grid: {
         left: "3%",
         right: "4%",
@@ -262,12 +261,18 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
         </div>
       </div>
       <div className="p-2">
-        <ReactECharts
-          option={getChartOption()}
-          style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}
-          notMerge
-          lazyUpdate
-        />
+        {hasData ? (
+          <ReactECharts
+            option={getChartOption()}
+            style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}
+            notMerge
+            lazyUpdate
+          />
+        ) : (
+          <div className="flex items-center justify-center" style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}>
+            <p className="text-xs text-slate-400">No data</p>
+          </div>
+        )}
       </div>
       {showInfo && (
         <div className="px-5 py-3 bg-slate-50 border-t border-slate-100 space-y-1.5">

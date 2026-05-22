@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback } from "react";
+import { useCallback, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useUploadStore } from "@/stores/upload-store";
@@ -8,7 +8,9 @@ import { api } from "@/services/api";
 
 export default function UploadPage() {
   const router = useRouter();
-  const { file, progress, status, error, setFile, setProgress, setStatus, setError, setDatasetId } = useUploadStore();
+  const { file, progress, status, error, setFile, setProgress, setStatus, setError, setDatasetId, reset } = useUploadStore();
+
+  useEffect(() => { reset(); }, []);
 
   const onDrop = useCallback(
     async (acceptedFiles: File[]) => {
