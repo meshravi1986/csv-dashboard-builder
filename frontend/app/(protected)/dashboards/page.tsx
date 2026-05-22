@@ -160,17 +160,17 @@ export default function DashboardsPage() {
                   <p className="text-sm font-medium text-slate-900 truncate">{d.title}</p>
                   <div className="flex items-center gap-2 mt-0.5">
                     <p className="text-xs text-slate-400">{d.charts?.length || 0} charts</p>
-                    {(d.version_count || 0) > 1 && (
-                      <>
-                        <span className="text-xs text-slate-300">·</span>
-                        <button
-                          onClick={(e) => { e.stopPropagation(); router.push(`/dashboard-versions/${d.version_group_id}`); }}
-                          className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
-                        >
-                          {d.version_count} versions
-                        </button>
-                      </>
-                    )}
+                        {(d.version_count || 0) > 1 && (
+                          <>
+                            <span className="text-xs text-slate-300">·</span>
+                            <button
+                              onClick={(e) => { e.stopPropagation(); router.push(`/dashboard-versions/${d.version_group_id}`); }}
+                              className="text-xs text-blue-600 hover:text-blue-800 hover:underline"
+                            >
+                              v{d.version_count}
+                            </button>
+                          </>
+                        )}
                   </div>
                 </div>
               </div>
@@ -221,9 +221,9 @@ export default function DashboardsPage() {
                     {(d.version_count || 0) > 1 ? (
                       <button
                         onClick={(e) => { e.stopPropagation(); router.push(`/dashboard-versions/${d.version_group_id}`); }}
-                        className="text-blue-600 hover:text-blue-800 hover:underline"
+                        className="text-blue-600 hover:text-blue-800 hover:underline font-medium"
                       >
-                        {d.version_count} versions
+                        {d.version_count}
                       </button>
                     ) : (
                       <span className="text-slate-300">-</span>
