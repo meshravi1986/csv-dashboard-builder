@@ -1,4 +1,6 @@
-const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+let API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
+// Strip trailing /api/v1 if already present in env var to avoid double path
+API_URL = API_URL.replace(/\/api\/v1\/?$/, "");
 
 const FETCH_TIMEOUT = 30000;
 
