@@ -27,7 +27,8 @@ pip install -r requirements.txt
 cp .env.example .env
 # Edit .env with your Supabase credentials
 
-# Start backend (use port 8002 if 8000 has orphaned sockets)
+# Start backend (Windows: use start.ps1 to kill orphaned TCP sockets)
+# If port 8000 is stuck, use a different port or run start.ps1 -Port 8000
 uvicorn app.main:app --reload --port 8000
 ```
 

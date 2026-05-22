@@ -37,6 +37,9 @@ npm run dev
 - **Formula tooltip** — Hover metric name to see formula; saves chart header space
 - **List / Grid toggle** — Switch between grid cards and table list view on My Dashboards page
 - **Sign-up flow** — Account creation redirects to sign-in page with success message (no auto-login)
+- **Drag state isolation** — Local chart order guarded against parent re-renders via ref-based sync guard
+- **Filter clear** — Restores original data from ref without re-fetching from server
+- **Version creation resilience** — Dashboard page retries fetch 3x with delay to handle Supabase commit latency
 
 ## Structure
 

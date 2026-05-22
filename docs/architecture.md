@@ -72,6 +72,11 @@ which users can accept or override.
 All aggregations run via DuckDB in-memory inside the backend container.
 No external query engine needed.
 
+### Dashboard Version Creation
+- Copies semantics, metrics, and chart_specs from the source dashboard
+- On the frontend, `loadDashboard()` retries up to 3 times with 800ms delays
+  to handle the race condition between version creation and dashboard page load
+
 ### Parquet Storage
 CSV files are converted to Parquet for efficient storage and querying.
 Parquet files stored in Supabase Storage.
@@ -106,3 +111,19 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 6. Dashboard generation → chart_specs created → stored in dashboards + chart_specs
 7. Frontend renders charts via ECharts based on chart_specs
 8. Charts can be reordered via drag-and-drop; order persisted to backend
+9. Filter changes save original unfiltered data in a ref and restore it locally on clear (no server re-fetch)
+10. Dashboard fetch retries 3x with 800ms delay to handle Supabase propagation lag on version creation
+
+## Drag-and-Drop Reordering
+
+Charts are grouped into three independent sortable contexts (KPI, full-width, half-width), each with its own `DndContext` + `SortableContext`. On drag end:
+- Local `charts` state is optimistically updated
+- `persistOrder` fires `PUT /dashboards/{id}/charts/reorder`
+- If the API fails, the error is logged (no rollback — state persists until next server sync)
+- The `useEffect` that syncs from `dashboard.charts` prop is **guarded by a ref**: it only runs on initial mount or when the dashboard ID changes. This prevents parent re-renders from overwriting the local drag state.
+
+## Filtering
+
+- Filters save the original unfiltered chart data in `unfilteredDataRef` before applying
+- Clearing filters restores data from the ref — **no server round-trip**
+- This avoids a previous infinite re-render loop caused by `dashboard?.charts` in the filter effect deps
