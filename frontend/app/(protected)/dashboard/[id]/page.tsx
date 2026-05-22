@@ -22,11 +22,27 @@ export default function DashboardDetailPage() {
   const [showPalettePicker, setShowPalettePicker] = useState(false);
   const titleRef = useRef<HTMLInputElement>(null);
   const paletteRef = useRef<HTMLDivElement>(null);
+  const unfilteredDataRef = useRef<any>(null);
+  const loadAttemptRef = useRef(0);
 
   const loadDashboard = useCallback(async () => {
     if (!params.id) return;
+    loadAttemptRef.current = 0;
+    const tryLoad = async (): Promise<any> => {
+      try {
+        const data = await api.getDashboard(params.id as string);
+        return data;
+      } catch (err) {
+        if (loadAttemptRef.current < 3) {
+          loadAttemptRef.current++;
+          await new Promise((r) => setTimeout(r, 800));
+          return tryLoad();
+        }
+        throw err;
+      }
+    };
     try {
-      const data = await api.getDashboard(params.id as string);
+      const data = await tryLoad();
       const saved = localStorage.getItem(`dashboard_color_${params.id}`);
       if (saved) data.color_scheme = saved;
       setDashboard(data);
@@ -54,8 +70,18 @@ export default function DashboardDetailPage() {
 
     const fetchFiltered = async () => {
       if (activeFilters.length === 0) {
-        loadDashboard();
+        if (unfilteredDataRef.current) {
+          setDashboard((prev: any) => {
+            if (!prev) return prev;
+            return { ...prev, charts: unfilteredDataRef.current };
+          });
+          unfilteredDataRef.current = null;
+        }
         return;
+      }
+
+      if (!unfilteredDataRef.current) {
+        unfilteredDataRef.current = dashboard.charts;
       }
 
       try {
@@ -100,7 +126,7 @@ export default function DashboardDetailPage() {
     };
 
     fetchFiltered();
-  }, [activeFilters, params.id, dashboard?.charts]);
+  }, [activeFilters, params.id]);
 
   useEffect(() => {
     if (editingTitle && titleRef.current) titleRef.current.focus();
