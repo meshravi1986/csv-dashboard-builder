@@ -2,6 +2,7 @@ import os
 import json
 import uuid
 import threading
+from typing import Optional
 import polars as pl
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
