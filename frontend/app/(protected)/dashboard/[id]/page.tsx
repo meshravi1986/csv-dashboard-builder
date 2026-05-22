@@ -17,6 +17,7 @@ export default function DashboardDetailPage() {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [suggestedFilters, setSuggestedFilters] = useState<any[]>([]);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
+  const [filterRefreshKey, setFilterRefreshKey] = useState(0);
   const [editingTitle, setEditingTitle] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
   const [showPalettePicker, setShowPalettePicker] = useState(false);
@@ -24,6 +25,10 @@ export default function DashboardDetailPage() {
   const paletteRef = useRef<HTMLDivElement>(null);
   const unfilteredDataRef = useRef<any>(null);
   const loadAttemptRef = useRef(0);
+  const chartsRef = useRef<any>(null);
+  chartsRef.current = dashboard?.charts;
+  const activeFiltersRef = useRef<any[]>([]);
+  activeFiltersRef.current = activeFilters;
 
   const loadDashboard = useCallback(async () => {
     if (!params.id) return;
@@ -47,6 +52,10 @@ export default function DashboardDetailPage() {
       if (saved) data.color_scheme = saved;
       setDashboard(data);
       setTitleDraft(data.title);
+      if (activeFiltersRef.current.length > 0) {
+        unfilteredDataRef.current = null;
+        setFilterRefreshKey(k => k + 1);
+      }
     } catch (err) {
       console.error(err);
     } finally {
@@ -66,7 +75,7 @@ export default function DashboardDetailPage() {
   }, [params.id]);
 
   useEffect(() => {
-    if (!params.id || !dashboard?.charts) return;
+    if (!params.id || !chartsRef.current) return;
 
     const fetchFiltered = async () => {
       if (activeFilters.length === 0) {
@@ -81,7 +90,7 @@ export default function DashboardDetailPage() {
       }
 
       if (!unfilteredDataRef.current) {
-        unfilteredDataRef.current = dashboard.charts;
+        unfilteredDataRef.current = chartsRef.current;
       }
 
       try {
@@ -99,7 +108,7 @@ export default function DashboardDetailPage() {
       } catch (err) {
         console.error("Batch filter fetch failed, falling back to per-chart:", err);
         const results = await Promise.allSettled(
-          dashboard.charts.map(async (chart: any) => {
+          chartsRef.current.map(async (chart: any) => {
             const data = await api.getChartDataFiltered(
               params.id as string,
               chart.id,
@@ -126,7 +135,7 @@ export default function DashboardDetailPage() {
     };
 
     fetchFiltered();
-  }, [activeFilters, params.id]);
+  }, [activeFilters, params.id, filterRefreshKey]);
 
   useEffect(() => {
     if (editingTitle && titleRef.current) titleRef.current.focus();

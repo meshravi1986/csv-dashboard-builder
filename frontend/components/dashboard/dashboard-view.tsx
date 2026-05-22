@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, useRef } from "react";
+import { useEffect, useState, useCallback } from "react";
 import { ChartCard } from "./chart-card";
 import type { ChartSpec } from "@/types";
 import { api } from "@/services/api";
@@ -68,20 +68,11 @@ function SortableChartCard({ chart, onDelete, colorScheme }: { chart: ChartSpec;
 }
 
 export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
-  const [charts, setCharts] = useState<ChartSpec[]>(dashboard.charts);
-  const initializedRef = useRef(false);
-  const dashboardIdRef = useRef(dashboard.id);
+  const [charts, setCharts] = useState<ChartSpec[]>(dashboard.charts || []);
 
   useEffect(() => {
-    if (dashboard.id !== dashboardIdRef.current) {
-      dashboardIdRef.current = dashboard.id;
-      initializedRef.current = false;
-    }
-    if (!initializedRef.current) {
-      setCharts(dashboard.charts);
-      initializedRef.current = true;
-    }
-  }, [dashboard.charts, dashboard.id]);
+    setCharts(dashboard.charts || []);
+  }, [dashboard.charts]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),

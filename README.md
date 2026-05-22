@@ -38,8 +38,9 @@ npm run dev
 - **List / Grid toggle** — Switch between grid cards and table list view on My Dashboards page
 - **Refresh Frequency** — Tag versions with Monthly/Weekly/Quarterly/Adhoc; displayed in dashboard cards and list
 - **Sign-up flow** — Account creation redirects to sign-in page with success message (no auto-login)
-- **Drag state isolation** — Local chart order guarded against parent re-renders via ref-based sync guard
-- **Filter clear** — Restores original data from ref without re-fetching from server
+- **Filter persistence** — Filters persist across add/delete chart operations; after dashboard refresh, active filters are automatically re-applied to the updated dataset
+- **Filter clear** — Restores original chart data from a ref without re-fetching from server
+- **Drag state isolation** — Local chart order is never overwritten by prop changes since drag reorder only touches local state; the sync effect only fires when the parent's `dashboard.charts` actually changes
 - **Version creation resilience** — Dashboard page retries fetch 3x with delay to handle Supabase commit latency
 - **Cascading delete** — Deleting a versioned dashboard removes all versions in the group
 - **Duplicate guard** — `startedRef` prevents React StrictMode double-effect from creating two dashboards
