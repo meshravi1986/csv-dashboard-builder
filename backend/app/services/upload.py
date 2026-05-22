@@ -1,11 +1,16 @@
 import os
 import uuid
+import threading
 import polars as pl
 from pathlib import Path
 from fastapi import UploadFile, HTTPException
 from app.utils.supabase import get_supabase, get_supabase_storage
 from app.config import settings
 from app.engine.profiling import count_rows
+
+
+_download_locks: dict[str, threading.Lock] = {}
+_download_lock_lock = threading.Lock()
 
 
 TEMP_DIR = Path(__file__).parent.parent / "temp"
@@ -110,14 +115,25 @@ def get_parquet_path(parquet_storage_path: str) -> str:
     temp_path = TEMP_DIR / Path(parquet_storage_path).name
     if temp_path.exists() and temp_path.stat().st_size > 0:
         return str(temp_path)
-    try:
-        storage = get_supabase_storage()
-        data = storage.download(parquet_storage_path)
-        temp_path.write_bytes(data)
-        if temp_path.stat().st_size == 0:
-            raise ValueError("Downloaded empty file")
-    except Exception as e:
-        if temp_path.exists():
-            temp_path.unlink()
-        raise HTTPException(status_code=500, detail=f"Failed to load dataset: {str(e)}")
+
+    # Per-path lock prevents concurrent downloads of the same file
+    with _download_lock_lock:
+        if parquet_storage_path not in _download_locks:
+            _download_locks[parquet_storage_path] = threading.Lock()
+        lock = _download_locks[parquet_storage_path]
+
+    with lock:
+        # Double-check after acquiring lock (another thread may have just finished)
+        if temp_path.exists() and temp_path.stat().st_size > 0:
+            return str(temp_path)
+        try:
+            storage = get_supabase_storage()
+            data = storage.download(parquet_storage_path)
+            temp_path.write_bytes(data)
+            if temp_path.stat().st_size == 0:
+                raise ValueError("Downloaded empty file")
+        except Exception as e:
+            if temp_path.exists():
+                temp_path.unlink()
+            raise HTTPException(status_code=500, detail=f"Failed to load dataset: {str(e)}")
     return str(temp_path)

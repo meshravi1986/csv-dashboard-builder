@@ -62,7 +62,7 @@ def suggest_semantics(
     parquet_path = get_parquet_path(dataset["parquet_path"])
     profile = profile_dataset(parquet_path, dataset_id=dataset_id)
 
-    ai_suggestions = get_ai_semantic_suggestions(profile)
+    ai_suggestions = get_ai_semantic_suggestions(profile, dataset_id=dataset_id)
 
     fields = []
     for field in profile["fields"]:
