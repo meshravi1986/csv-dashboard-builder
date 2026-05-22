@@ -1,11 +1,4 @@
-const ENV_URL = process.env.NEXT_PUBLIC_API_URL || "";
-const API_URL = ENV_URL || "http://localhost:8000";
-
-// Debug: log the actual API URL being used
-if (typeof window !== "undefined") {
-  console.log("[API] NEXT_PUBLIC_API_URL from env:", JSON.stringify(process.env.NEXT_PUBLIC_API_URL));
-  console.log("[API] Final API_URL:", API_URL);
-}
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "https://csv-dashboard-builder-production.up.railway.app/api/v1";
 
 const FETCH_TIMEOUT = 30000;
 
