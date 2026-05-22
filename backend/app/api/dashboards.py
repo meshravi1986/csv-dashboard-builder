@@ -125,6 +125,7 @@ def generate_dashboard(
         "dataset_id": dataset_id,
         "title": dashboard["title"],
         "description": dashboard.get("description"),
+        "refresh_frequency": "Adhoc",
         "created_at": now,
         "updated_at": now,
     }
@@ -311,6 +312,7 @@ def create_dashboard_version(
         "version_group_id": version_group_id,
         "version_number": next_vn,
         "tag": req.tag,
+        "refresh_frequency": req.refresh_frequency,
         "created_at": now,
         "updated_at": now,
     }
@@ -349,6 +351,7 @@ def create_dashboard_version(
         "version_group_id": version_group_id,
         "version_number": next_vn,
         "tag": req.tag,
+        "refresh_frequency": req.refresh_frequency,
     }
 
 

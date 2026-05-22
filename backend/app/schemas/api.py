@@ -131,7 +131,8 @@ class DashboardUpdate(BaseModel):
 
 class VersionCreateRequest(BaseModel):
     new_dataset_id: str
-    tag: str
+    refresh_frequency: str = "Adhoc"
+    tag: str = ""
 
 class ColumnMatchResult(BaseModel):
     matches: list[dict]

@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS chart_specs (
 ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS version_group_id UUID;
 ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS tag TEXT;
 ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS version_number INTEGER NOT NULL DEFAULT 1;
+ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS refresh_frequency TEXT NOT NULL DEFAULT 'Adhoc';
 
 -- Dataset columns JSONB for fast column matching (run after existing schema)
 ALTER TABLE datasets ADD COLUMN IF NOT EXISTS columns JSONB;

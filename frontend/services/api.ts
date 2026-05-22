@@ -334,12 +334,12 @@ class ApiService {
     return res.json();
   }
 
-  async createDashboardVersion(dashboardId: string, newDatasetId: string, tag: string) {
+  async createDashboardVersion(dashboardId: string, newDatasetId: string, refreshFrequency: string, tag: string) {
     const headers = await this.getAuthHeaders();
     const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/create-version`, {
       method: "POST",
       headers,
-      body: JSON.stringify({ new_dataset_id: newDatasetId, tag }),
+      body: JSON.stringify({ new_dataset_id: newDatasetId, refresh_frequency: refreshFrequency, tag }),
     });
     if (!res.ok) {
       const err = await res.json().catch(() => ({ detail: "Version creation failed" }));

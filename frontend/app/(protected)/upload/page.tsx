@@ -12,6 +12,7 @@ export default function UploadPage() {
   const [columnMatch, setColumnMatch] = useState<any>(null);
   const [showVersionModal, setShowVersionModal] = useState(false);
   const [versionTag, setVersionTag] = useState("");
+  const [refreshFrequency, setRefreshFrequency] = useState("Monthly");
   const [versionCreating, setVersionCreating] = useState(false);
 
   useEffect(() => { reset(); }, []);
@@ -60,7 +61,8 @@ export default function UploadPage() {
       const result = await api.createDashboardVersion(
         columnMatch.dashboard_id,
         dsId,
-        versionTag || `v${(columnMatch.version_number || 0) + 1}`
+        refreshFrequency,
+        versionTag
       );
       router.push(`/dashboard/${result.id}`);
     } catch (err: any) {
@@ -111,13 +113,28 @@ export default function UploadPage() {
           <div className="space-y-3">
             <div>
               <label className="block text-sm font-medium text-slate-700 mb-1.5">
-                Version Tag <span className="text-slate-400">(optional)</span>
+                Refresh Frequency
+              </label>
+              <select
+                value={refreshFrequency}
+                onChange={(e) => setRefreshFrequency(e.target.value)}
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900 bg-white"
+              >
+                <option value="Monthly">Monthly</option>
+                <option value="Weekly">Weekly</option>
+                <option value="Quarterly">Quarterly</option>
+                <option value="Adhoc">Adhoc</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Tag <span className="text-slate-400">(optional)</span>
               </label>
               <input
                 type="text"
                 value={versionTag}
                 onChange={(e) => setVersionTag(e.target.value)}
-                placeholder="e.g. Monthly Refresh"
+                placeholder="e.g. Feb"
                 className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900"
               />
             </div>

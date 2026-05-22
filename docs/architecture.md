@@ -32,7 +32,9 @@ Sidebar (collapsible to icon-only)
 
 Dashboard Versions  (/dashboard-versions/[versionGroupId])
 ├── Table of all versions with v1/v2 tags, chart count, links
-└── "Latest" badge on newest version
+├── "Latest" badge on newest version
+├── Create version: asks for Refresh Frequency (Monthly/Weekly/Quarterly/Adhoc) + Tag (e.g. Feb)
+└── Non-versioned dashboards show "Adhoc" as default refresh frequency
 
 Dashboard Detail
 ├── Title (inline editable)

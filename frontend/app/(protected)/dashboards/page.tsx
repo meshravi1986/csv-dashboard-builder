@@ -174,9 +174,12 @@ export default function DashboardsPage() {
                   </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                  {d.refresh_frequency || "Adhoc"}
+                </span>
                 {d.latest_tag && (
-                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                  <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                     {d.latest_tag}
                   </span>
                 )}
@@ -196,6 +199,7 @@ export default function DashboardsPage() {
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Name</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Charts</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Versions</th>
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Refresh</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Tag</th>
                 <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Created</th>
                 <th className="w-10 px-5 py-3" />
@@ -226,8 +230,13 @@ export default function DashboardsPage() {
                     )}
                   </td>
                   <td className="px-5 py-3.5 text-sm">
+                    <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                      {d.refresh_frequency || "Adhoc"}
+                    </span>
+                  </td>
+                  <td className="px-5 py-3.5 text-sm">
                     {d.latest_tag ? (
-                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-slate-100 text-slate-600">
+                      <span className="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium bg-blue-100 text-blue-700">
                         {d.latest_tag}
                       </span>
                     ) : (
