@@ -3,20 +3,29 @@
 import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { ChartSpec } from "@/types";
+import { getPalette } from "@/lib/palettes";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
 interface ChartCardProps {
   chart: ChartSpec;
   onDelete?: (chartId: string) => void;
+  colorScheme?: string;
 }
 
-export function ChartCard({ chart, onDelete }: ChartCardProps) {
+export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
   const [showInfo, setShowInfo] = useState(false);
+  const palette = getPalette(colorScheme);
 
   const labels = chart.data?.labels || [];
   const values = chart.data?.values || [];
   const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
+
+  const formulaTooltip =
+    chart.formula ||
+    (chart.chart_type === "kpi"
+      ? `${chart.aggregation}(${chart.y_field})`
+      : `${chart.aggregation}(${chart.y_field}) by ${chart.x_field}`);
 
   const getChartOption = () => {
 
@@ -55,7 +64,7 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
               text: val !== null ? val.toLocaleString() : "—",
               fontSize: 36,
               fontWeight: 600,
-              fill: val !== null ? "#0f172a" : "#94a3b8",
+              fill: val !== null ? palette.colors[0] : "#94a3b8",
             },
           },
         };
@@ -82,8 +91,8 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
               smooth: true,
               symbol: "circle",
               symbolSize: 6,
-              lineStyle: { width: 2, color: "#0f172a" },
-              itemStyle: { color: "#0f172a" },
+              lineStyle: { width: 2, color: palette.colors[0] },
+              itemStyle: { color: palette.colors[0] },
               areaStyle: {
                 color: {
                   type: "linear",
@@ -92,8 +101,8 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
                   x2: 0,
                   y2: 1,
                   colorStops: [
-                    { offset: 0, color: "rgba(15,23,42,0.1)" },
-                    { offset: 1, color: "rgba(15,23,42,0.01)" },
+                    { offset: 0, color: palette.fill(0.1) },
+                    { offset: 1, color: palette.fill(0.01) },
                   ],
                 },
               },
@@ -129,8 +138,8 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
                   x2: 0,
                   y2: 1,
                   colorStops: [
-                    { offset: 0, color: "#1e293b" },
-                    { offset: 1, color: "#475569" },
+                    { offset: 0, color: palette.colors[0] },
+                    { offset: 1, color: palette.colors[1] || palette.colors[0] },
                   ],
                 },
                 borderRadius: [2, 2, 0, 0],
@@ -162,6 +171,7 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
                 borderColor: "#fff",
                 borderWidth: 2,
               },
+              color: palette.colors,
               label: {
                 show: true,
                 formatter: "{b}\n{d}%",
@@ -214,8 +224,8 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
                   y: 0.5,
                   r: 0.5,
                   colorStops: [
-                    { offset: 0, color: "rgba(15,23,42,0.6)" },
-                    { offset: 1, color: "rgba(15,23,42,0.1)" },
+                    { offset: 0, color: palette.fill(0.6) },
+                    { offset: 1, color: palette.fill(0.1) },
                   ],
                 },
               },
@@ -233,12 +243,10 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
         <div>
-          <h3 className="text-sm font-medium text-slate-900">{chart.title}</h3>
-          <p className="text-xs text-slate-400 mt-0.5">
-            {chart.chart_type === "kpi"
-              ? `${chart.aggregation}(${chart.y_field})`
-              : `${chart.aggregation}(${chart.y_field}) by ${chart.x_field}`}
-          </p>
+          <h3 className="text-sm font-medium text-slate-900" title={formulaTooltip}>
+            {chart.title}
+            <span className="ml-1.5 inline-block w-2 h-2 rounded-full" style={{ backgroundColor: palette.colors[0] }} />
+          </h3>
         </div>
         <div className="flex items-center gap-1">
           {onDelete && (
@@ -263,6 +271,7 @@ export function ChartCard({ chart, onDelete }: ChartCardProps) {
       <div className="p-2">
         {hasData ? (
           <ReactECharts
+            key={colorScheme || "slate"}
             option={getChartOption()}
             style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}
             notMerge

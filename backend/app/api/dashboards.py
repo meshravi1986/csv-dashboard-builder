@@ -212,6 +212,8 @@ def update_dashboard(
         update_data["title"] = update.title
     if update.description is not None:
         update_data["description"] = update.description
+    if update.color_scheme is not None:
+        update_data["color_scheme"] = update.color_scheme
 
     supabase.table("dashboards").update(update_data).eq("id", dashboard_id).execute()
 

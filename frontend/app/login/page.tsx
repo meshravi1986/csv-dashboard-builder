@@ -11,11 +11,13 @@ export default function LoginPage() {
   const [email, setEmail] = useState("");
   const [pin, setPin] = useState("");
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError("");
+    setSuccess("");
     setLoading(true);
 
     try {
@@ -31,13 +33,17 @@ export default function LoginPage() {
           setLoading(false);
           return;
         }
-        const { data, error: signUpError } = await supabase.auth.signUp({
+        const { error: signUpError } = await supabase.auth.signUp({
           email,
           password: pin,
           options: { data: { full_name: name } },
         });
         if (signUpError) throw signUpError;
-        if (data.session) router.push("/dashboards");
+        setMode("signin");
+        setError("");
+        setSuccess("Account created! Please sign in with your email and PIN.");
+        setName("");
+        setPin("");
       } else {
         const { data, error: signInError } =
           await supabase.auth.signInWithPassword({
@@ -135,6 +141,11 @@ export default function LoginPage() {
               </p>
             </div>
 
+            {success && (
+              <div className="bg-green-50 border border-green-200 rounded-lg p-3 text-sm text-green-700">
+                {success}
+              </div>
+            )}
             {error && (
               <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
                 {error}
@@ -159,6 +170,7 @@ export default function LoginPage() {
               onClick={() => {
                 setMode(mode === "signin" ? "signup" : "signin");
                 setError("");
+                setSuccess("");
               }}
               className="text-sm text-slate-500 hover:text-slate-900 transition-colors"
             >

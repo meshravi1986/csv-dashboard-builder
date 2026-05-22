@@ -27,12 +27,13 @@ interface DashboardViewProps {
     id?: string;
     title: string;
     description?: string;
+    color_scheme?: string;
     charts: ChartSpec[];
   };
   onRefresh?: () => void;
 }
 
-function SortableChartCard({ chart, onDelete }: { chart: ChartSpec; onDelete: (id: string) => void }) {
+function SortableChartCard({ chart, onDelete, colorScheme }: { chart: ChartSpec; onDelete: (id: string) => void; colorScheme?: string }) {
   const {
     attributes,
     listeners,
@@ -60,7 +61,7 @@ function SortableChartCard({ chart, onDelete }: { chart: ChartSpec; onDelete: (i
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
           </svg>
         </div>
-        <ChartCard chart={chart} onDelete={onDelete} />
+        <ChartCard chart={chart} onDelete={onDelete} colorScheme={colorScheme} />
       </div>
     </div>
   );
@@ -136,7 +137,7 @@ export function DashboardView({ dashboard, onRefresh }: DashboardViewProps) {
           {title && <h3 className="text-sm font-medium text-slate-700 mb-3">{title}</h3>}
           <div className={className}>
             {groupCharts.map((chart) => (
-              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} />
+              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} colorScheme={dashboard.color_scheme} />
             ))}
           </div>
         </SortableContext>

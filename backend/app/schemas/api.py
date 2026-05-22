@@ -124,6 +124,7 @@ class DashboardListResponse(BaseModel):
 class DashboardUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
+    color_scheme: Optional[str] = None
     charts: Optional[List[ChartSpec]] = None
 
 

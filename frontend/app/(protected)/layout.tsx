@@ -97,51 +97,53 @@ export default function ProtectedLayout({
             })}
           </nav>
 
-          <div className="px-2 py-4 border-t border-slate-200">
-            <div className={`flex items-center ${collapsed ? "justify-center" : "gap-3 px-3"} py-2`}>
-              {user.avatar_url && (
-                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full shrink-0" />
-              )}
-              {!collapsed && (
-                <div className="flex-1 min-w-0">
-                  <p className="text-sm font-medium text-slate-900 truncate">{user.name}</p>
-                  <p className="text-xs text-slate-400 truncate">{user.email}</p>
-                </div>
-              )}
-            </div>
-            <button
-              onClick={handleLogout}
-              className={`w-full mt-1 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors ${collapsed ? "px-0 py-2" : "px-3 py-2 text-left"}`}
-              title={collapsed ? "Sign out" : undefined}
-            >
-              <svg className={`w-5 h-5 mx-auto ${collapsed ? "" : "hidden"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-              </svg>
-              {!collapsed && "Sign out"}
-            </button>
+          <div className="p-2 border-t border-slate-200">
             <button
               onClick={toggleCollapsed}
-              className="w-full mt-1 px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
+              className="w-full px-3 py-2 text-sm text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors flex items-center justify-center"
               title={collapsed ? "Expand sidebar" : "Collapse sidebar"}
             >
               <svg className={`w-4 h-4 transition-transform ${collapsed ? "" : "rotate-180"}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
               </svg>
+              {!collapsed && <span className="ml-2">Collapse</span>}
             </button>
           </div>
         </div>
       </aside>
 
       <div className="flex-1 flex flex-col min-w-0">
-        <header className="h-16 bg-white border-b border-slate-200 flex items-center px-4 lg:px-8">
+        <header className="h-16 bg-white border-b border-slate-200 flex items-center justify-between px-4 lg:px-8">
           <button
             onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="lg:hidden p-2 rounded-lg hover:bg-slate-100 mr-3"
+            className="lg:hidden p-2 rounded-lg hover:bg-slate-100"
           >
             <svg className="w-5 h-5 text-slate-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
             </svg>
           </button>
+
+          <div className="flex items-center gap-4 ml-auto">
+            <div className="flex items-center gap-3">
+              {user.avatar_url && (
+                <img src={user.avatar_url} alt="" className="w-8 h-8 rounded-full" />
+              )}
+              <div className="hidden sm:block">
+                <p className="text-sm font-medium text-slate-900 leading-tight">{user.name}</p>
+                <p className="text-xs text-slate-400 leading-tight">{user.email}</p>
+              </div>
+            </div>
+            <button
+              onClick={handleLogout}
+              className="px-3 py-1.5 text-sm text-slate-500 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors"
+              title="Sign out"
+            >
+              <svg className="w-5 h-5 sm:hidden" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+              </svg>
+              <span className="hidden sm:inline">Sign out</span>
+            </button>
+          </div>
         </header>
 
         <main className="flex-1 p-4 lg:p-8 overflow-auto">

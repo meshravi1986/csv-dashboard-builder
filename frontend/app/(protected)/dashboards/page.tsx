@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { api } from "@/services/api";
 import ProductTour from "@/components/onboarding/product-tour";
 
@@ -20,12 +21,25 @@ export default function DashboardsPage() {
   const [deleting, setDeleting] = useState<string | null>(null);
   const [workflowDismissed, setWorkflowDismissed] = useState(false);
   const [showTour, setShowTour] = useState(false);
+  const [isFirstTime, setIsFirstTime] = useState(false);
+  const [userId, setUserId] = useState("");
+  const [viewMode, setViewMode] = useState<"grid" | "list">("grid");
+
+  useEffect(() => {
+    const stored = localStorage.getItem("dashboards_view_mode");
+    if (stored === "list") setViewMode("list");
+  }, []);
 
   useEffect(() => {
     const dismissed = localStorage.getItem("workflow_dismissed");
     if (dismissed === "true") setWorkflowDismissed(true);
-    const tourDismissed = localStorage.getItem("tour_dismissed");
-    if (tourDismissed !== "true") setShowTour(true);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      const uid = session?.user?.id || "";
+      setUserId(uid);
+      const key = `tour_completed_${uid}`;
+      const tourCompleted = localStorage.getItem(key);
+      if (tourCompleted !== "true") { setIsFirstTime(true); setShowTour(true); }
+    });
   }, []);
 
   useEffect(() => {
@@ -81,6 +95,26 @@ export default function DashboardsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
+          <div className="flex bg-slate-100 rounded-lg p-0.5">
+            <button
+              onClick={() => { setViewMode("grid"); localStorage.setItem("dashboards_view_mode", "grid"); }}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "grid" ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600"}`}
+              title="Grid view"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1V5zM14 5a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1V5zM4 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1H5a1 1 0 01-1-1v-4zM14 15a1 1 0 011-1h4a1 1 0 011 1v4a1 1 0 01-1 1h-4a1 1 0 01-1-1v-4z" />
+              </svg>
+            </button>
+            <button
+              onClick={() => { setViewMode("list"); localStorage.setItem("dashboards_view_mode", "list"); }}
+              className={`p-1.5 rounded-md transition-colors ${viewMode === "list" ? "bg-white shadow-sm text-slate-900" : "text-slate-400 hover:text-slate-600"}`}
+              title="List view"
+            >
+              <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 10h16M4 14h16M4 18h16" />
+              </svg>
+            </button>
+          </div>
           <button
             onClick={() => setShowTour(true)}
             className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-colors"
@@ -99,7 +133,7 @@ export default function DashboardsPage() {
         </div>
       </div>
 
-      {dashboards.length > 0 && (
+      {dashboards.length > 0 && viewMode === "grid" && (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {dashboards.map((d) => (
             <div
@@ -131,6 +165,48 @@ export default function DashboardsPage() {
               <p className="text-xs text-slate-300 mt-3">{new Date(d.created_at).toLocaleDateString()}</p>
             </div>
           ))}
+        </div>
+      )}
+
+      {dashboards.length > 0 && viewMode === "list" && (
+        <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+          <table className="w-full">
+            <thead>
+              <tr className="border-b border-slate-100">
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Name</th>
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Charts</th>
+                <th className="text-left text-xs font-medium text-slate-400 uppercase tracking-wider px-5 py-3">Created</th>
+                <th className="w-10 px-5 py-3" />
+              </tr>
+            </thead>
+            <tbody>
+              {dashboards.map((d) => (
+                <tr
+                  key={d.id}
+                  onClick={() => router.push(`/dashboard/${d.id}`)}
+                  className="border-b border-slate-50 hover:bg-slate-50 cursor-pointer transition-colors"
+                >
+                  <td className="px-5 py-3.5">
+                    <p className="text-sm font-medium text-slate-900">{d.title}</p>
+                    {d.description && <p className="text-xs text-slate-500 mt-0.5 line-clamp-1">{d.description}</p>}
+                  </td>
+                  <td className="px-5 py-3.5 text-sm text-slate-500">{d.charts?.length || 0}</td>
+                  <td className="px-5 py-3.5 text-sm text-slate-400">{new Date(d.created_at).toLocaleDateString()}</td>
+                  <td className="px-5 py-3.5">
+                    <button
+                      onClick={(e) => handleDelete(e, d.id)}
+                      disabled={deleting === d.id}
+                      className="p-1.5 rounded-lg text-slate-300 hover:text-red-500 hover:bg-red-50 transition-colors"
+                    >
+                      <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -188,7 +264,7 @@ export default function DashboardsPage() {
         </div>
       )}
 
-      {showTour && <ProductTour onClose={() => setShowTour(false)} />}
+      {showTour && <ProductTour onClose={() => setShowTour(false)} mandatory={isFirstTime} userId={userId} />}
     </div>
   );
 }

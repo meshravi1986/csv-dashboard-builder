@@ -18,21 +18,32 @@ Two metric sources:
 ## Navigation
 
 ```
+Top Header Bar
+└── User info (avatar + name + email) + Sign out (always visible)
+
 Sidebar (collapsible to icon-only)
 ├── My Dashboards  (/dashboards)
 └── My Metrics     (/my-metrics)
-└── User info + Sign out (footer)
+└── Collapse toggle (bottom)
 
 Dashboard Detail
-├── Chart area (sortable by drag & drop)
+├── Title (inline editable)
+├── Color palette picker
+├── Chart area (sortable by drag & drop, color-schemed)
 ├── Add chart panel
 ├── Filter bar (global dimension/date filters)
+├── Formula tooltip on hover (instead of persistent text)
 └── Edit workspace (back to semantics)
+
+My Dashboards
+├── Grid view (cards)
+└── List view (sortable table)
+   └── Toggle persisted in localStorage
 ```
 
 Sidebar can be collapsed to a narrow icon strip via the chevron button at the bottom.
-Collapse state persists in localStorage. Sign-out is always in the sidebar footer
-for consistency across all protected pages.
+Collapse state persists in localStorage. User info and sign-out moved to the top
+header bar so they're always visible regardless of page scroll.
 
 ## Key Design Decisions
 

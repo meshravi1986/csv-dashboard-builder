@@ -71,6 +71,7 @@ export interface ChartSpec {
   aggregation_reasoning: string;
   order: number;
   width: "full" | "half";
+  formula?: string;
   data?: {
     labels: string[];
     values: (number | { x: number; y: number })[];
