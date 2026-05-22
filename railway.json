@@ -3,9 +3,16 @@
   "build": {
     "builder": "NIXPACKS",
     "buildCommand": null,
-    "nixpacksConfigPath": "backend"
+    "nixpacksConfigPath": "backend",
+    "nixpacksPlan": {
+      "phases": {
+        "setup": {
+          "name": "python"
+        }
+      }
+    }
   },
   "deploy": {
-    "startCommand": "cd backend && uvicorn app.main:app --host 0.0.0.0 --port $PORT"
+    "startCommand": "python -m uvicorn app.main:app --host 0.0.0.0 --port $PORT"
   }
 }
