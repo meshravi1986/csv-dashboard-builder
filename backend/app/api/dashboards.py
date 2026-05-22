@@ -37,6 +37,15 @@ def _rest_headers():
     }
 
 
+def _has_versioning_columns(supabase) -> bool:
+    """Check if the dashboards table has versioning columns."""
+    try:
+        supabase.table("dashboards").select("version_group_id").limit(1).execute()
+        return True
+    except Exception:
+        return False
+
+
 def get_dataset(dataset_id: str, user_id: str):
     supabase = get_supabase()
     result = supabase.table("datasets").select("*").eq("id", dataset_id).eq("user_id", user_id).execute()
@@ -79,12 +88,18 @@ def generate_dashboard(
     dashboard = build_dashboard(dataset_id, user["id"], semantic_fields, parquet_path, metrics=user_metrics)
     print(f"[generate_dashboard] Dashboard built ({len(dashboard['charts'])} charts) at {time_mod.time() - t0:.1f}s", flush=True)
 
+    has_versioning = _has_versioning_columns(supabase)
+
     # Delete existing dashboard for this dataset (non-versioned only)
-    existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).is_("version_group_id", "null").execute()
-    if existing.data:
-        for d in existing.data:
-            supabase.table("chart_specs").delete().eq("dashboard_id", d["id"]).execute()
-        supabase.table("dashboards").delete().eq("id", existing.data[0]["id"]).execute()
+    existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).execute()
+    existing_data = existing.data or []
+    if existing_data:
+        if has_versioning:
+            existing_data = [d for d in existing_data if d.get("version_group_id") is None]
+        if existing_data:
+            for d in existing_data:
+                supabase.table("chart_specs").delete().eq("dashboard_id", d["id"]).execute()
+            supabase.table("dashboards").delete().eq("id", existing_data[0]["id"]).execute()
 
     db_dashboard_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
@@ -104,18 +119,18 @@ def generate_dashboard(
                         continue
                     raise HTTPException(status_code=500, detail=f"{label} timed out")
 
-    # Set version_group_id = dashboard_id for first version (no grouping)
     dash_payload = {
         "id": db_dashboard_id,
         "user_id": user["id"],
         "dataset_id": dataset_id,
         "title": dashboard["title"],
         "description": dashboard.get("description"),
-        "version_group_id": db_dashboard_id,
-        "version_number": 1,
         "created_at": now,
         "updated_at": now,
     }
+    if has_versioning:
+        dash_payload["version_group_id"] = db_dashboard_id
+        dash_payload["version_number"] = 1
     _post_json(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert")
 
     # Batch insert all charts in a single POST
@@ -147,8 +162,9 @@ def generate_dashboard(
         _post_json(f"{SUPABASE_REST_URL}/chart_specs", chart_payloads, "Chart batch insert")
 
     dashboard["id"] = db_dashboard_id
-    dashboard["version_group_id"] = db_dashboard_id
-    dashboard["version_number"] = 1
+    if has_versioning:
+        dashboard["version_group_id"] = db_dashboard_id
+        dashboard["version_number"] = 1
 
     supabase.table("datasets").update({"status": "ready", "updated_at": now}).eq("id", dataset_id).execute()
 
@@ -199,6 +215,8 @@ def list_dashboard_versions(
     user: dict = Depends(get_current_user),
 ):
     supabase = get_supabase()
+    if not _has_versioning_columns(supabase):
+        raise HTTPException(status_code=400, detail="Versioning not enabled. Run the database migration first (see docs/schema.sql).")
     result = supabase.table("dashboards").select("*").eq("version_group_id", version_group_id).eq("user_id", user["id"]).order("version_number", desc=True).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="No versions found")
@@ -222,6 +240,8 @@ def create_dashboard_version(
     user: dict = Depends(get_current_user),
 ):
     supabase = get_supabase()
+    if not _has_versioning_columns(supabase):
+        raise HTTPException(status_code=400, detail="Versioning not enabled. Run the database migration first (see docs/schema.sql).")
     now = datetime.utcnow().isoformat()
     headers = _rest_headers()
 
@@ -338,12 +358,22 @@ def check_column_match(
     user: dict = Depends(get_current_user),
 ):
     """Check if current dataset's columns match any existing dashboard's dataset columns."""
+    print(f"[column-match] Starting for dataset {dataset_id}", flush=True)
     supabase = get_supabase()
-    dataset = get_dataset(dataset_id, user["id"])
+    try:
+        dataset = get_dataset(dataset_id, user["id"])
+    except HTTPException as e:
+        print(f"[column-match] Dataset {dataset_id} not found: {e}", flush=True)
+        return {"matches": []}
 
     # Get current dataset columns from parquet
-    parquet_path = get_parquet_path(dataset["parquet_path"])
+    try:
+        parquet_path = get_parquet_path(dataset["parquet_path"])
+    except HTTPException as e:
+        print(f"[column-match] Parquet download failed for {dataset_id}: {e}", flush=True)
+        return {"matches": []}
     if not parquet_path:
+        print(f"[column-match] No parquet path for {dataset_id}", flush=True)
         return {"matches": []}
 
     with get_duckdb() as conn:
@@ -351,34 +381,47 @@ def check_column_match(
         cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{parquet_path}')").fetchall()
         for col_name, _ in cols_info:
             current_cols.add(col_name.lower())
+        print(f"[column-match] Current columns: {sorted(current_cols)}", flush=True)
 
     # Find all dashboards by this user that have datasets with matching columns
     dashboards = supabase.table("dashboards").select("*").eq("user_id", user["id"]).order("created_at", desc=True).execute()
+    print(f"[column-match] Found {len(dashboards.data)} user dashboards", flush=True)
 
     matches = []
     seen_datasets = set()
     for d in dashboards.data:
-        ds_id = d["dataset_id"]
-        if ds_id == dataset_id or ds_id in seen_datasets:
+        ds_id = d.get("dataset_id")
+        if not ds_id or ds_id == dataset_id or ds_id in seen_datasets:
+            if ds_id:
+                print(f"[column-match] Skipping dashboard {d['id']} (dataset {ds_id}: already seen or self)", flush=True)
+            else:
+                print(f"[column-match] Skipping dashboard {d['id']} (no dataset_id)", flush=True)
             continue
         seen_datasets.add(ds_id)
 
-        ds = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
-        if not ds.data:
-            continue
-
-        other_path = get_parquet_path(ds.data[0]["parquet_path"])
-        if not other_path:
-            continue
-
         try:
+            ds = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
+            if not ds.data:
+                print(f"[column-match] Dataset {ds_id} not found in DB", flush=True)
+                continue
+
+            ds_name = ds.data[0].get("name", "?")
+            print(f"[column-match] Checking dashboard '{d['title']}' dataset '{ds_name}' ({ds_id})...", flush=True)
+
+            other_path = get_parquet_path(ds.data[0]["parquet_path"])
+            if not other_path:
+                print(f"[column-match] No parquet path for dataset {ds_id}", flush=True)
+                continue
+
             other_cols_info = conn.execute(f"SELECT column_name, column_type FROM (DESCRIBE '{other_path}')").fetchall()
             other_cols = set()
             for col_name, _ in other_cols_info:
                 other_cols.add(col_name.lower())
+            print(f"[column-match] Other columns: {sorted(other_cols)}", flush=True)
 
             if current_cols == other_cols:
                 vgid = d.get("version_group_id") or d["id"]
+                print(f"[column-match] MATCH! Dashboard '{d['title']}' ({d['id']})", flush=True)
                 matches.append({
                     "dashboard_id": d["id"],
                     "dashboard_title": d["title"],
@@ -387,9 +430,13 @@ def check_column_match(
                     "version_group_id": vgid,
                     "version_number": d.get("version_number") or 1,
                 })
-        except Exception:
+            else:
+                print(f"[column-match] No match: columns differ", flush=True)
+        except Exception as e:
+            print(f"[column-match] Error checking dataset {ds_id}: {e}", flush=True)
             continue
 
+    print(f"[column-match] Returning {len(matches)} matches", flush=True)
     return {"matches": matches}
 
 

@@ -3,8 +3,11 @@
 ## Flow
 
 ```
-Upload CSV → Profile Dataset → Confirm Semantics → Define Metrics → Generate Dashboard → View/Edit (reorder, filter)
+Upload CSV → Column Match Check → [Version Found?] → Version Modal (skip profile/semantics/metrics)
+           → [No Match?] → Profile Dataset → Confirm Semantics → Define Metrics → Generate Dashboard → View/Edit (reorder, filter)
 ```
+
+The versioning column match happens **server-side during upload**. If the uploaded CSV's columns match an existing dashboard's dataset, the user is offered a choice: create a new version (reusing layout, metrics, chart types — only data is refreshed) or proceed as a new dashboard. This avoids redoing the profile/semantics/metrics flow for data refreshes.
 
 Three metric modes:
 - **Simple**: pick a field + aggregation
@@ -22,12 +25,22 @@ Top Header Bar
 └── User info (avatar + name + email) + Sign out (always visible)
 
 Sidebar (collapsible to icon-only)
-├── My Dashboards  (/dashboards)
-└── My Metrics     (/my-metrics)
+├── My Dashboards  (/dashboards) — grid/list toggle, versions count + tag
+├── My Metrics     (/my-metrics)
+├── Product Tour   (available from My Dashboards)
 └── Collapse toggle (bottom)
+
+Dashboard Versions  (/dashboard-versions/[versionGroupId])
+├── Table of all versions with v1/v2 tags, chart count, links
+└── "Latest" badge on newest version
 
 Dashboard Detail
 ├── Title (inline editable)
+├── Color Palette picker
+├── Version info (via breadcrumb to versions list)
+├── Filters (dimension multi-select + date picker + presets)
+├── Charts (grouped: KPI / full-width / half-width, drag-reorderable)
+└── Formula tooltip on hover
 ├── Color palette picker
 ├── Chart area (sortable by drag & drop, color-schemed)
 ├── Add chart panel

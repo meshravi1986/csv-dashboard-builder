@@ -54,11 +54,45 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
 
         supabase.table("datasets").insert(dataset_data).execute()
 
+        # Check if uploaded columns match any existing dashboard's dataset
+        column_match = None
+        try:
+            current_cols = set(c.lower() for c in df.columns)
+            existing_dashboards = supabase.table("dashboards").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+            seen_datasets = set()
+            for d in existing_dashboards.data:
+                ds_id = d.get("dataset_id")
+                if not ds_id or ds_id in seen_datasets:
+                    continue
+                seen_datasets.add(ds_id)
+                ds_result = supabase.table("datasets").select("parquet_path, name").eq("id", ds_id).execute()
+                if not ds_result.data:
+                    continue
+                other_path = get_parquet_path(ds_result.data[0]["parquet_path"])
+                if not other_path:
+                    continue
+                other_df = pl.read_parquet(other_path)
+                other_cols = set(c.lower() for c in other_df.columns)
+                if current_cols == other_cols:
+                    vgid = d.get("version_group_id") or d["id"]
+                    column_match = {
+                        "dashboard_id": d["id"],
+                        "dashboard_title": d["title"],
+                        "dataset_id": ds_id,
+                        "dataset_name": ds_result.data[0].get("name", ""),
+                        "version_group_id": vgid,
+                        "version_number": d.get("version_number") or 1,
+                    }
+                    break
+        except Exception:
+            pass
+
         return {
             "dataset_id": dataset_id,
             "filename": file.filename,
             "row_count": row_count,
             "column_count": column_count,
+            "column_match": column_match,
         }
 
     except pl.exceptions.PolarsError as e:

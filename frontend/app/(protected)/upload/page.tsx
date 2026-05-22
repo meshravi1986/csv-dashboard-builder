@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useDropzone } from "react-dropzone";
 import { useUploadStore } from "@/stores/upload-store";
@@ -9,6 +9,10 @@ import { api } from "@/services/api";
 export default function UploadPage() {
   const router = useRouter();
   const { file, progress, status, error, setFile, setProgress, setStatus, setError, setDatasetId, reset } = useUploadStore();
+  const [columnMatch, setColumnMatch] = useState<any>(null);
+  const [showVersionModal, setShowVersionModal] = useState(false);
+  const [versionTag, setVersionTag] = useState("");
+  const [versionCreating, setVersionCreating] = useState(false);
 
   useEffect(() => { reset(); }, []);
 
@@ -31,7 +35,13 @@ export default function UploadPage() {
         });
         setDatasetId(result.dataset_id);
         setStatus("complete");
-        router.push(`/profile?dataset_id=${result.dataset_id}`);
+
+        if (result.column_match) {
+          setColumnMatch(result.column_match);
+          setShowVersionModal(true);
+        } else {
+          router.push(`/profile?dataset_id=${result.dataset_id}`);
+        }
       } catch (err: any) {
         setError(err.message || "Upload failed");
         setStatus("error");
@@ -40,6 +50,34 @@ export default function UploadPage() {
     [router, setFile, setProgress, setStatus, setError, setDatasetId]
   );
 
+  const handleCreateVersion = async () => {
+    if (!columnMatch) return;
+    setVersionCreating(true);
+    try {
+      const store = useUploadStore.getState();
+      const dsId = store.dataset_id;
+      if (!dsId) return;
+      const result = await api.createDashboardVersion(
+        columnMatch.dashboard_id,
+        dsId,
+        versionTag || `v${(columnMatch.version_number || 0) + 1}`
+      );
+      router.push(`/dashboard/${result.id}`);
+    } catch (err: any) {
+      setError(err.message || "Version creation failed");
+      setShowVersionModal(false);
+    } finally {
+      setVersionCreating(false);
+    }
+  };
+
+  const handleNewDashboard = () => {
+    const store = useUploadStore.getState();
+    if (store.dataset_id) {
+      router.push(`/profile?dataset_id=${store.dataset_id}`);
+    }
+  };
+
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop,
     accept: { "text/csv": [".csv"] },
@@ -47,6 +85,64 @@ export default function UploadPage() {
     maxSize: 100 * 1024 * 1024,
     disabled: status === "uploading",
   });
+
+  if (showVersionModal && columnMatch) {
+    return (
+      <div className="max-w-lg mx-auto mt-12">
+        <div className="bg-white rounded-xl border border-slate-200 p-8 shadow-lg">
+          <div className="flex items-center gap-3 mb-4">
+            <div className="w-10 h-10 rounded-lg bg-blue-100 flex items-center justify-center">
+              <svg className="w-5 h-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+              </svg>
+            </div>
+            <div>
+              <h2 className="text-lg font-semibold text-slate-900">Matching Dataset Found</h2>
+              <p className="text-sm text-slate-500">
+                This file has the same columns as &quot;{columnMatch.dashboard_title}&quot;
+              </p>
+            </div>
+          </div>
+
+          <p className="text-sm text-slate-600 mb-6">
+            Would you like to create a new version of the existing dashboard (reusing its layout, metrics, and chart types) or set up a brand new dashboard from scratch?
+          </p>
+
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-slate-700 mb-1.5">
+                Version Tag <span className="text-slate-400">(optional)</span>
+              </label>
+              <input
+                type="text"
+                value={versionTag}
+                onChange={(e) => setVersionTag(e.target.value)}
+                placeholder="e.g. Monthly Refresh"
+                className="w-full px-3 py-2 border border-slate-200 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 focus:border-slate-900"
+              />
+            </div>
+
+            <div className="flex gap-3 pt-2">
+              <button
+                onClick={handleCreateVersion}
+                disabled={versionCreating}
+                className="flex-1 px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-lg hover:bg-blue-700 transition-colors disabled:opacity-50"
+              >
+                {versionCreating ? "Creating..." : "Create Version"}
+              </button>
+              <button
+                onClick={handleNewDashboard}
+                disabled={versionCreating}
+                className="flex-1 px-4 py-2 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors disabled:opacity-50"
+              >
+                New Dashboard
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -117,7 +213,7 @@ export default function UploadPage() {
                 </svg>
               </div>
               <p className="text-sm font-medium text-green-600">
-                Upload complete! Redirecting...
+                Upload complete!
               </p>
             </div>
           ) : error ? (

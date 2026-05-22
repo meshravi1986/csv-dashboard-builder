@@ -11,6 +11,7 @@ class UploadResponse(BaseModel):
     filename: str
     row_count: int
     column_count: int
+    column_match: Optional[dict] = None
 
 
 class FieldProfile(BaseModel):

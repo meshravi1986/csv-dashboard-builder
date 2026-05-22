@@ -41,7 +41,7 @@ class ApiService {
     const formData = new FormData();
     formData.append("file", file);
 
-    return new Promise<{ dataset_id: string }>((resolve, reject) => {
+    return new Promise<{ dataset_id: string; column_match?: any }>((resolve, reject) => {
       const xhr = new XMLHttpRequest();
       xhr.upload.addEventListener("progress", (e) => {
         if (e.lengthComputable && onProgress) {
