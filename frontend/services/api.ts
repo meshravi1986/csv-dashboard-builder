@@ -1,5 +1,4 @@
-const IS_PRODUCTION = typeof window !== "undefined" && window.location.hostname !== "localhost";
-const API_URL = IS_PRODUCTION ? "/api/v1" : (process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000");
+const API_URL = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8000";
 
 const FETCH_TIMEOUT = 30000;
 
