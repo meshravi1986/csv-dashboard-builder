@@ -6,7 +6,6 @@ import { supabase } from "@/lib/supabase";
 import { api } from "@/services/api";
 import dynamic from "next/dynamic";
 import html2canvas from "html2canvas";
-import jsPDF from "jspdf";
 import { getPalette } from "@/lib/palettes";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
@@ -79,35 +78,9 @@ export default function DashboardViewPage() {
   };
 
   const exportPDF = async () => {
-    const el = captureRef.current;
-    if (!el) return;
     setExporting("pdf");
     try {
-      const canvas = await html2canvas(el, {
-        backgroundColor: "#f8fafc",
-        scale: 2,
-        useCORS: true,
-        logging: false,
-      });
-      const MARGIN = 10;
-      const pdf = new jsPDF("l", "mm", "a4");
-      const pageWidth = pdf.internal.pageSize.getWidth() - MARGIN * 2;
-      const pageHeight = pdf.internal.pageSize.getHeight() - MARGIN * 2;
-      const scale = pageWidth / canvas.width;
-      const sliceH = pageHeight / scale;
-      const pages = Math.ceil(canvas.height / sliceH);
-      for (let i = 0; i < pages; i++) {
-        if (i > 0) pdf.addPage();
-        const srcY = i * sliceH;
-        const h = Math.min(sliceH, canvas.height - srcY);
-        const pageCanvas = document.createElement("canvas");
-        pageCanvas.width = canvas.width;
-        pageCanvas.height = h;
-        const ctx = pageCanvas.getContext("2d")!;
-        ctx.drawImage(canvas, 0, srcY, canvas.width, h, 0, 0, canvas.width, h);
-        pdf.addImage(pageCanvas.toDataURL("image/png"), "PNG", MARGIN, MARGIN, pageWidth, h * scale);
-      }
-      pdf.save(`${dashboard?.title || "dashboard"}.pdf`);
+      window.print();
     } catch (err) {
       console.error(err);
     } finally {
@@ -133,7 +106,16 @@ export default function DashboardViewPage() {
 
   return (
     <div className="min-h-screen bg-slate-50">
-      <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
+      <style>{`
+        @media print {
+          .no-print { display: none !important; }
+          .print-only { display: block !important; }
+          .print-chart { page-break-inside: avoid; break-inside: avoid; }
+          body { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        }
+        .print-only { display: none; }
+      `}</style>
+      <div className="sticky top-0 z-10 bg-white border-b border-slate-200 no-print">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
           <div ref={dashboardRef}>
             <h1 className="text-lg font-semibold text-slate-900">{dashboard.title}</h1>
@@ -195,7 +177,7 @@ function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorSc
   return (
     <div className="space-y-6">
       {kpiCharts.length > 0 && (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print-chart">
           {kpiCharts.map((chart) => (
             <ChartView key={chart.id} chart={chart} palette={palette.colors} />
           ))}
@@ -264,7 +246,7 @@ function ChartView({ chart, palette }: { chart: ChartSpec; palette: string[] }) 
   };
 
   return (
-    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden print-chart">
       <div className="px-5 py-3 border-b border-slate-100">
         <h2 className="text-base font-semibold text-slate-900">{chart.title}</h2>
       </div>
