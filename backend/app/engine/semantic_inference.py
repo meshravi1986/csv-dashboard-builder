@@ -15,12 +15,19 @@ IDENTIFIER_PATTERNS = re.compile(
 
 TIMESTAMP_PATTERNS = re.compile(
     r"^(created_at|updated_at|modified_at|deleted_at|archived_at|"
+    r"processed_at|completed_at|submitted_at|requested_at|responded_at|"
+    r"scheduled_at|published_at|approved_at|cancelled_at|login_at|logout_at|"
     r"created_date|modified_date|inserted_at|event_date|event_time|"
     r"timestamp|datetime|date_at|date_created|date_modified|"
     r"start_date|end_date|effective_date|expiry_date|due_date|"
-    r"order_date|ship_date|transaction_date|payment_date)$",
+    r"order_date|ship_date|transaction_date|payment_date|"
+    r"transaction_time|order_time|shipping_time|delivery_time|"
+    r"response_time|processing_time|arrival_time|departure_time)$",
     re.IGNORECASE,
 )
+
+# Catch-all for fields ending with _at or _time (common timestamp suffixes)
+TIMESTAMP_SUFFIX_PATTERNS = re.compile(r"(_at$|_time$)", re.IGNORECASE)
 
 CURRENCY_NAME_PATTERNS = re.compile(
     r"^(revenue|sales|amount|price|cost|expense|income|profit|salary|wage|fee|payment|budget|"
@@ -134,7 +141,7 @@ def infer_semantic_tags(
 
     # -- 2. Timestamp / date detection --
     is_date_type = detected_type == "date"
-    is_timestamp_name = bool(TIMESTAMP_PATTERNS.fullmatch(field_name))
+    is_timestamp_name = bool(TIMESTAMP_PATTERNS.fullmatch(field_name)) or bool(TIMESTAMP_SUFFIX_PATTERNS.search(field_name))
     if is_date_type or is_timestamp_name:
         result["semantic_tags"].append("timestamp")
         result["suggested_role"] = "date"
