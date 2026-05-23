@@ -133,6 +133,7 @@ class DashboardResponse(BaseModel):
     description: Optional[str] = None
     charts: List[ChartSpec]
     tabs: List[TabResponse] = []
+    field_formats: Dict[str, str] = {}
     created_at: str
     updated_at: str
 

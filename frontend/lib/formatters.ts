@@ -1,19 +1,24 @@
 export function formatValue(value: any, format?: string): string {
   if (value === null || value === undefined || value === "") return "—";
-  if (!format) return String(value);
 
   const num = typeof value === "number" ? value : Number(value);
   const isNumeric = !isNaN(num);
 
+  if (!format) {
+    return isNumeric
+      ? new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 }).format(num)
+      : String(value);
+  }
+
   switch (format) {
     case "currency":
       return isNumeric
-        ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0 }).format(num)
+        ? new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", minimumFractionDigits: 0, maximumFractionDigits: 2 }).format(num)
         : String(value);
     case "percent":
       return isNumeric ? num.toFixed(1) + "%" : String(value);
     case "number":
-      return isNumeric ? num.toLocaleString("en-US") : String(value);
+      return isNumeric ? num.toLocaleString("en-US", { maximumFractionDigits: 2 }) : String(value);
     case "decimal_2":
       return isNumeric ? num.toFixed(2) : String(value);
     case "month_year":
