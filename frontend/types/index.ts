@@ -75,6 +75,7 @@ export interface ChartSpec {
   chart_score?: number;
   score_reasons?: string[];
   suppression_reason?: string;
+  duplicate_of_chart_id?: string;
   data?: {
     labels: string[];
     values: (number | { x: number; y: number })[];

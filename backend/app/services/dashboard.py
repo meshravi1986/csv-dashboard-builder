@@ -137,9 +137,13 @@ def build_dashboard(
 
     chart_specs, all_chart_data = suppress_charts(chart_specs, all_chart_data, profile, row_count=profile.get("row_count", 0) if profile else 0)
 
-    if not chart_specs:
-        chart_specs = [{"chart_type": "kpi", "x_field": "", "y_field": "", "aggregation": "COUNT", "x_role": "dimension", "y_role": "measure", "order": 0, "width": "full", "title": "No Data", "semantic_reasoning": "", "chart_reasoning": "", "aggregation_reasoning": "", "formula": None}]
-        all_chart_data = [{"labels": [], "values": [0]}]
+    # Filter out suppressed specs
+    pairs = [(s, d) for s, d in zip(chart_specs, all_chart_data) if not s.get("_suppressed")]
+    if not pairs:
+        pairs = [({"chart_type": "kpi", "x_field": "", "y_field": "", "aggregation": "COUNT", "x_role": "dimension", "y_role": "measure", "order": 0, "width": "full", "title": "No Data", "semantic_reasoning": "", "chart_reasoning": "", "aggregation_reasoning": "", "formula": None}, {"labels": [], "values": [0]})]
+    chart_specs, all_chart_data = zip(*pairs)
+    chart_specs = list(chart_specs)
+    all_chart_data = list(all_chart_data)
 
     # Merge data into specs for layout reordering
     for spec, data in zip(chart_specs, all_chart_data):
@@ -147,9 +151,18 @@ def build_dashboard(
     chart_specs = layout_dashboard(chart_specs)
     all_chart_data = [s.pop("_data") for s in chart_specs]
 
-    for i, spec in enumerate(chart_specs):
-        chart_id = str(uuid.uuid4())
-        chart_data = all_chart_data[i] if i < len(all_chart_data) else {"labels": [], "values": []}
+    # Assign chart IDs and build dicts; resolve duplicate references
+    orig_idx_to_chart_id: Dict[int, str] = {}
+    for idx, spec in enumerate(chart_specs):
+        orig_idx_to_chart_id[idx] = str(uuid.uuid4())
+
+    for idx, spec in enumerate(chart_specs):
+        chart_id = orig_idx_to_chart_id[idx]
+        chart_data = all_chart_data[idx] if idx < len(all_chart_data) else {"labels": [], "values": []}
+        dup_of = None
+        dup_idx = spec.get("duplicate_of_index")
+        if dup_idx is not None:
+            dup_of = orig_idx_to_chart_id.get(dup_idx)
         charts.append({
             "id": chart_id,
             "dashboard_id": dashboard_id,
@@ -168,6 +181,7 @@ def build_dashboard(
             "width": spec["width"],
             "tab_id": default_tab_id,
             "data": chart_data,
+            "duplicate_of_chart_id": dup_of,
             "created_at": now,
             "updated_at": now,
         })

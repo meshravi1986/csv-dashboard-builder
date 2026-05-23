@@ -180,6 +180,20 @@ def generate_chart_specs(
     return specs
 
 
+def _insight_key(spec: Dict[str, Any]) -> tuple:
+    ct = spec.get("chart_type", "")
+    xf = spec.get("x_field", "")
+    yf = spec.get("y_field", "")
+    xr = spec.get("x_role", "")
+    if ct == "scatter":
+        return ("scatter_pair", xf, yf)
+    if ct == "kpi":
+        return ("kpi", yf)
+    if xr == "date":
+        return ("date_trend", yf)
+    return ("dim_measure", xf, yf)
+
+
 def suppress_charts(
     chart_specs: List[Dict[str, Any]],
     all_chart_data: List[Dict[str, Any]],
@@ -187,11 +201,25 @@ def suppress_charts(
     row_count: int,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     profile_map = _build_profile_map(profile)
-    seen_insights: set = set()
-    kept_specs: List[Dict[str, Any]] = []
-    kept_data: List[Dict[str, Any]] = []
 
-    for spec, data in zip(chart_specs, all_chart_data):
+    # Near-duplicate detection: group by insight key, keep highest-scored per group
+    near_dup_groups: Dict[tuple, List[tuple]] = {}
+    for idx, spec in enumerate(chart_specs):
+        key = _insight_key(spec)
+        score = spec.get("chart_score", 0) or 0
+        near_dup_groups.setdefault(key, []).append((score, idx))
+
+    keep_idx: set = set()
+    keeper_of_group: Dict[tuple, int] = {}
+    for key, entries in near_dup_groups.items():
+        entries.sort(key=lambda e: -e[0])
+        keeper = entries[0][1]
+        keep_idx.add(keeper)
+        keeper_of_group[key] = keeper
+        for entry in entries[1:]:
+            chart_specs[entry[1]]["duplicate_of_index"] = keeper
+
+    for idx, (spec, data) in enumerate(zip(chart_specs, all_chart_data)):
         reasons: List[str] = []
         y_field = spec.get("y_field", "")
         x_field = spec.get("x_field", "")
@@ -240,28 +268,16 @@ def suppress_charts(
                 if zero_frac > 0.8:
                     reasons.append(f"{sum(1 for v in nums if v == 0)}/{len(nums)} values are zero (>80%)")
 
-        # Rule 7: duplicate insight
-        if chart_type == "scatter":
-            key = ("scatter", x_field, y_field)
-        elif chart_type == "kpi":
-            key = ("kpi", y_field)
-        else:
-            key = (chart_type, x_field, y_field, spec.get("aggregation"))
-        if key in seen_insights:
-            reasons.append("Duplicate insight (same x/y/agg as another chart)")
-        seen_insights.add(key)
+        # Rule 7: near-duplicate insight
+        if idx not in keep_idx:
+            spec["duplicate_of_index"] = keeper_of_group.get(_insight_key(spec))
+            reasons.append("Near-duplicate insight (same measure+dimension as higher-scored chart)")
 
+        spec["_suppressed"] = len(reasons) > 0
         if reasons:
             spec["suppression_reason"] = "; ".join(reasons)
-        else:
-            kept_specs.append(spec)
-            kept_data.append(data)
 
-    if len(kept_specs) < len(chart_specs):
-        for i, spec in enumerate(kept_specs):
-            spec["order"] = i
-
-    return kept_specs, kept_data
+    return chart_specs, all_chart_data
 
 
 def _interleave_types(charts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
