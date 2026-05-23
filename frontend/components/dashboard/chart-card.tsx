@@ -281,12 +281,12 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormats
           <ReactECharts
             key={colorScheme || "slate"}
             option={getChartOption()}
-            style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}
+            style={{ height: chart.chart_type === "kpi" ? 120 : 320 }}
             notMerge
             lazyUpdate
           />
         ) : (
-          <div className="flex items-center justify-center" style={{ height: chart.chart_type === "kpi" ? 160 : 320 }}>
+          <div className="flex items-center justify-center" style={{ height: chart.chart_type === "kpi" ? 120 : 320 }}>
             <p className="text-xs text-slate-400">No data</p>
           </div>
         )}
