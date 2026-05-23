@@ -89,11 +89,24 @@ export default function DashboardViewPage() {
         useCORS: true,
         logging: false,
       });
-      const imgData = canvas.toDataURL("image/png");
+      const MARGIN = 10;
       const pdf = new jsPDF("l", "mm", "a4");
-      const pdfWidth = pdf.internal.pageSize.getWidth();
-      const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
-      pdf.addImage(imgData, "PNG", 0, 0, pdfWidth, pdfHeight);
+      const pageWidth = pdf.internal.pageSize.getWidth() - MARGIN * 2;
+      const pageHeight = pdf.internal.pageSize.getHeight() - MARGIN * 2;
+      const scale = pageWidth / canvas.width;
+      const sliceH = pageHeight / scale;
+      const pages = Math.ceil(canvas.height / sliceH);
+      for (let i = 0; i < pages; i++) {
+        if (i > 0) pdf.addPage();
+        const srcY = i * sliceH;
+        const h = Math.min(sliceH, canvas.height - srcY);
+        const pageCanvas = document.createElement("canvas");
+        pageCanvas.width = canvas.width;
+        pageCanvas.height = h;
+        const ctx = pageCanvas.getContext("2d")!;
+        ctx.drawImage(canvas, 0, srcY, canvas.width, h, 0, 0, canvas.width, h);
+        pdf.addImage(pageCanvas.toDataURL("image/png"), "PNG", MARGIN, MARGIN, pageWidth, h * scale);
+      }
       pdf.save(`${dashboard?.title || "dashboard"}.pdf`);
     } catch (err) {
       console.error(err);
