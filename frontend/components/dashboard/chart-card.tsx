@@ -268,7 +268,7 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardP
           )}
         </div>
       </div>
-      <div className="p-2 cursor-pointer" onClick={() => onExpand?.(chart)}>
+      <div className="p-2 cursor-pointer" onClick={() => chart.chart_type !== "kpi" && onExpand?.(chart)}>
         {hasData ? (
           <ReactECharts
             key={colorScheme || "slate"}

@@ -34,6 +34,7 @@ export default function DashboardViewPage() {
   const params = useParams();
   const router = useRouter();
   const dashboardRef = useRef<HTMLDivElement>(null);
+  const captureRef = useRef<HTMLDivElement>(null);
   const [dashboard, setDashboard] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [exporting, setExporting] = useState<string | null>(null);
@@ -55,10 +56,11 @@ export default function DashboardViewPage() {
   }, [params.id, router]);
 
   const exportPNG = async () => {
-    if (!dashboardRef.current) return;
+    const el = captureRef.current;
+    if (!el) return;
     setExporting("png");
     try {
-      const canvas = await html2canvas(dashboardRef.current, {
+      const canvas = await html2canvas(el, {
         backgroundColor: "#f8fafc",
         scale: 2,
         useCORS: true,
@@ -76,10 +78,11 @@ export default function DashboardViewPage() {
   };
 
   const exportPDF = async () => {
-    if (!dashboardRef.current) return;
+    const el = captureRef.current;
+    if (!el) return;
     setExporting("pdf");
     try {
-      const canvas = await html2canvas(dashboardRef.current, {
+      const canvas = await html2canvas(el, {
         backgroundColor: "#f8fafc",
         scale: 2,
         useCORS: true,
@@ -115,11 +118,13 @@ export default function DashboardViewPage() {
     );
   }
 
+  const nonKpiCharts = dashboard.charts.filter((c) => c.chart_type !== "kpi");
+
   return (
     <div className="min-h-screen bg-slate-50">
       <div className="sticky top-0 z-10 bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-6 py-3 flex items-center justify-between">
-          <div>
+          <div ref={dashboardRef}>
             <h1 className="text-lg font-semibold text-slate-900">{dashboard.title}</h1>
             {dashboard.description && (
               <p className="text-sm text-slate-500">{dashboard.description}</p>
@@ -150,17 +155,23 @@ export default function DashboardViewPage() {
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 py-6" ref={dashboardRef}>
-        <DashboardCharts dashboard={dashboard} />
+      <div className="max-w-7xl mx-auto px-6 py-6" ref={captureRef}>
+        <div className="mb-6">
+          <h1 className="text-2xl font-bold text-slate-900">{dashboard.title}</h1>
+          {dashboard.description && (
+            <p className="text-sm text-slate-500 mt-1">{dashboard.description}</p>
+          )}
+        </div>
+        <DashboardCharts charts={nonKpiCharts} colorScheme={dashboard.color_scheme} />
       </div>
     </div>
   );
 }
 
-function DashboardCharts({ dashboard }: { dashboard: DashboardData }) {
-  const palette = getPalette(dashboard.color_scheme);
+function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorScheme?: string }) {
+  const palette = getPalette(colorScheme);
 
-  if (dashboard.charts.length === 0) {
+  if (charts.length === 0) {
     return (
       <div className="text-center py-20">
         <p className="text-sm text-slate-400">No charts in this dashboard</p>
@@ -170,7 +181,7 @@ function DashboardCharts({ dashboard }: { dashboard: DashboardData }) {
 
   return (
     <div className="space-y-6">
-      {dashboard.charts.map((chart) => (
+      {charts.map((chart) => (
         <ChartView key={chart.id} chart={chart} palette={palette.colors} />
       ))}
     </div>
