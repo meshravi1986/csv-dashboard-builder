@@ -18,8 +18,8 @@ export default function DashboardDetailPage() {
   const [showAddPanel, setShowAddPanel] = useState(false);
   const [suggestedFilters, setSuggestedFilters] = useState<any[]>([]);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
-  const [filterRefreshKey, setFilterRefreshKey] = useState(0);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
+  const [filterRefreshKey, setFilterRefreshKey] = useState(0);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -72,6 +72,15 @@ export default function DashboardDetailPage() {
   useEffect(() => {
     loadDashboard();
   }, [loadDashboard]);
+
+  useEffect(() => {
+    if (!dashboard) return;
+    if (dashboard.tabs && dashboard.tabs.length > 0) {
+      if (!activeTabId) setActiveTabId(dashboard.tabs[0].id);
+    } else {
+      api.createTab(params.id as string, "Report 1").then(() => loadDashboard()).catch(console.error);
+    }
+  }, [dashboard?.tabs, activeTabId, loadDashboard, params.id]);
 
   useEffect(() => {
     if (!params.id) return;
@@ -227,131 +236,128 @@ export default function DashboardDetailPage() {
   const tabs = dashboard.tabs || [];
   const currentPalette = paletteOptions.find((p) => p.value === (dashboard.color_scheme || "slate")) || paletteOptions[0];
 
-  useEffect(() => {
-    if (tabs.length > 0 && !activeTabId) {
-      setActiveTabId(tabs[0].id);
-    }
-  }, [tabs, activeTabId]);
-
   const filteredCharts = activeTabId
     ? dashboard.charts.filter((c: any) => c.tab_id === activeTabId)
     : dashboard.charts;
 
   return (
-    <div className="space-y-6">
-      <div className="flex items-center gap-2 flex-wrap bg-slate-900/5 rounded-xl px-4 py-2.5 border border-slate-200/60">
-        <div className="relative" ref={paletteRef}>
-          <button
-            onClick={() => setShowPalettePicker(!showPalettePicker)}
-            className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
-            title="Change color scheme"
-          >
-            <span className="flex gap-0.5">
-              {currentPalette.colors.slice(0, 4).map((c, i) => (
-                <span key={i} className="w-2 h-4 rounded-sm" style={{ backgroundColor: c }} />
-              ))}
-            </span>
-            <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-            </svg>
+    <div>
+      <div className="sticky top-0 z-10 bg-slate-50 space-y-4 pb-4">
+        <div className="flex items-center gap-2 flex-wrap bg-slate-900/5 rounded-xl px-4 py-2.5 border border-slate-200/60">
+          <div className="relative" ref={paletteRef}>
+            <button
+              onClick={() => setShowPalettePicker(!showPalettePicker)}
+              className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+              title="Change color scheme"
+            >
+              <span className="flex gap-0.5">
+                {currentPalette.colors.slice(0, 4).map((c, i) => (
+                  <span key={i} className="w-2 h-4 rounded-sm" style={{ backgroundColor: c }} />
+                ))}
+              </span>
+              <svg className="w-3 h-3 text-slate-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+              </svg>
+            </button>
+            {showPalettePicker && (
+              <div className="absolute left-0 top-full mt-1 bg-white rounded-xl border border-slate-200 shadow-lg p-2 z-20 min-w-[200px]">
+                {paletteOptions.map((p) => (
+                  <button
+                    key={p.value}
+                    onClick={() => changeColorScheme(p.value)}
+                    className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-50 ${p.value === (dashboard.color_scheme || "slate") ? "bg-slate-100" : ""}`}
+                  >
+                    <span className="flex gap-0.5">
+                      {p.colors.slice(0, 4).map((c, i) => (
+                        <span key={i} className="w-3 h-4 rounded-sm" style={{ backgroundColor: c }} />
+                      ))}
+                    </span>
+                    <span className="text-slate-700">{p.label}</span>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+          <div className="w-px h-5 bg-slate-300/40" />
+          <button onClick={() => setShowAddPanel(!showAddPanel)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+            + Add Charts
           </button>
-          {showPalettePicker && (
-            <div className="absolute left-0 top-full mt-1 bg-white rounded-xl border border-slate-200 shadow-lg p-2 z-20 min-w-[200px]">
-              {paletteOptions.map((p) => (
-                <button
-                  key={p.value}
-                  onClick={() => changeColorScheme(p.value)}
-                  className={`w-full flex items-center gap-3 px-3 py-2 rounded-lg text-sm transition-colors hover:bg-slate-50 ${p.value === (dashboard.color_scheme || "slate") ? "bg-slate-100" : ""}`}
-                >
-                  <span className="flex gap-0.5">
-                    {p.colors.slice(0, 4).map((c, i) => (
-                      <span key={i} className="w-3 h-4 rounded-sm" style={{ backgroundColor: c }} />
-                    ))}
-                  </span>
-                  <span className="text-slate-700">{p.label}</span>
-                </button>
-              ))}
-            </div>
+          <div className="w-px h-5 bg-slate-300/40" />
+          <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+            Edit Semantics
+          </button>
+          <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+            Edit Metrics
+          </button>
+          <div className="flex-1" />
+          <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 border border-red-200 bg-white text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors">
+            {deleting ? "Deleting..." : "Delete"}
+          </button>
+        </div>
+
+        <div className="space-y-1">
+          {editingTitle ? (
+            <input
+              ref={titleRef}
+              value={titleDraft}
+              onChange={(e) => setTitleDraft(e.target.value)}
+              onBlur={saveTitle}
+              onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") { setTitleDraft(dashboard.title); setEditingTitle(false); } }}
+              className="text-2xl font-semibold text-slate-900 bg-transparent border-b-2 border-slate-900 outline-none w-full"
+            />
+          ) : (
+            <h1
+              className="text-2xl font-semibold text-slate-900 cursor-pointer hover:text-slate-600 transition-colors"
+              onClick={() => setEditingTitle(true)}
+              title="Click to edit"
+            >
+              {dashboard.title}
+            </h1>
+          )}
+          {editingDescription ? (
+            <textarea
+              ref={descriptionRef}
+              value={descriptionDraft}
+              onChange={(e) => setDescriptionDraft(e.target.value)}
+              onBlur={saveDescription}
+              onKeyDown={(e) => { if (e.key === "Escape") { setDescriptionDraft(dashboard.description || ""); setEditingDescription(false); } }}
+              className="text-sm text-slate-500 bg-transparent border-b border-slate-300 outline-none w-full resize-none overflow-hidden"
+              rows={1}
+            />
+          ) : (
+            <p
+              className="text-sm text-slate-500 cursor-pointer hover:text-slate-400 transition-colors min-h-[1.25rem]"
+              onClick={() => setEditingDescription(true)}
+              title="Click to edit description"
+            >
+              {dashboard.description || "Add a description..."}
+            </p>
           )}
         </div>
-        <div className="w-px h-5 bg-slate-300/40" />
-        <button onClick={() => setShowAddPanel(!showAddPanel)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
-          + Add Charts
-        </button>
-        <div className="w-px h-5 bg-slate-300/40" />
-        <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
-          Edit Semantics
-        </button>
-        <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
-          Edit Metrics
-        </button>
-        <div className="flex-1" />
-        <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 border border-red-200 bg-white text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors">
-          {deleting ? "Deleting..." : "Delete"}
-        </button>
-      </div>
 
-      <div className="space-y-1">
-        {editingTitle ? (
-          <input
-            ref={titleRef}
-            value={titleDraft}
-            onChange={(e) => setTitleDraft(e.target.value)}
-            onBlur={saveTitle}
-            onKeyDown={(e) => { if (e.key === "Enter") saveTitle(); if (e.key === "Escape") { setTitleDraft(dashboard.title); setEditingTitle(false); } }}
-            className="text-2xl font-semibold text-slate-900 bg-transparent border-b-2 border-slate-900 outline-none w-full"
-          />
-        ) : (
-          <h1
-            className="text-2xl font-semibold text-slate-900 cursor-pointer hover:text-slate-600 transition-colors"
-            onClick={() => setEditingTitle(true)}
-            title="Click to edit"
-          >
-            {dashboard.title}
-          </h1>
-        )}
-        {editingDescription ? (
-          <textarea
-            ref={descriptionRef}
-            value={descriptionDraft}
-            onChange={(e) => setDescriptionDraft(e.target.value)}
-            onBlur={saveDescription}
-            onKeyDown={(e) => { if (e.key === "Escape") { setDescriptionDraft(dashboard.description || ""); setEditingDescription(false); } }}
-            className="text-sm text-slate-500 bg-transparent border-b border-slate-300 outline-none w-full resize-none overflow-hidden"
-            rows={1}
-          />
-        ) : (
-          <p
-            className="text-sm text-slate-500 cursor-pointer hover:text-slate-400 transition-colors min-h-[1.25rem]"
-            onClick={() => setEditingDescription(true)}
-            title="Click to edit description"
-          >
-            {dashboard.description || "Add a description..."}
-          </p>
-        )}
-      </div>
-
-      <FilterBar
-        availableFilters={suggestedFilters}
-        activeFilters={activeFilters}
-        onChange={setActiveFilters}
-      />
-
-      {showAddPanel && (
-        <AddChartPanel
-          dashboardId={params.id as string}
-          activeTabId={activeTabId}
-          onClose={() => setShowAddPanel(false)}
-          onAdded={() => { setShowAddPanel(false); loadDashboard(); }}
+        <FilterBar
+          availableFilters={suggestedFilters}
+          activeFilters={activeFilters}
+          onChange={setActiveFilters}
         />
-      )}
-      <TabBar
-        dashboardId={params.id as string}
-        tabs={tabs}
-        activeTabId={activeTabId}
-        onTabChange={setActiveTabId}
-        onRefresh={loadDashboard}
-      />
+
+        {showAddPanel && (
+          <AddChartPanel
+            dashboardId={params.id as string}
+            activeTabId={activeTabId}
+            onClose={() => setShowAddPanel(false)}
+            onAdded={() => { setShowAddPanel(false); loadDashboard(); }}
+          />
+        )}
+        <TabBar
+          dashboardId={params.id as string}
+          tabs={tabs}
+          activeTabId={activeTabId}
+          onTabChange={setActiveTabId}
+          onRefresh={loadDashboard}
+        />
+      </div>
+
       <DashboardView dashboard={{ ...dashboard, charts: filteredCharts }} onRefresh={loadDashboard} />
     </div>
   );

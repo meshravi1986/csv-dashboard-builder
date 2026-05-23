@@ -707,7 +707,8 @@ def add_chart(
         x_role = "measure"
 
     width = "half"
-    title = chart.title or f"{chart.aggregation}({chart.y_field}) by {chart.x_field}" if chart.x_field else f"{chart.aggregation}({chart.y_field})"
+    default_title = f"{chart.aggregation}({chart.y_field}) by {chart.x_field}" if chart.x_field else f"{chart.aggregation}({chart.y_field})"
+    title = chart.title or default_title
 
     now = datetime.utcnow().isoformat()
     chart_id = str(uuid.uuid4())

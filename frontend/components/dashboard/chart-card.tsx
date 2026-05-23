@@ -22,10 +22,9 @@ export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
   const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
 
   const formulaTooltip =
-    chart.formula ||
-    (chart.chart_type === "kpi"
-      ? `${chart.aggregation}(${chart.y_field})`
-      : `${chart.aggregation}(${chart.y_field}) by ${chart.x_field}`);
+    chart.formula
+      ? `${chart.title}  ·  Formula: ${chart.formula}`
+      : chart.title;
 
   const getChartOption = () => {
 
@@ -249,6 +248,12 @@ export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
           </h3>
         </div>
         <div className="flex items-center gap-1">
+          <button
+            onClick={() => setShowInfo(!showInfo)}
+            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-50 transition-colors"
+          >
+            Why this chart?
+          </button>
           {onDelete && (
             <button
               onClick={(e) => { e.stopPropagation(); onDelete(chart.id); }}
@@ -260,12 +265,6 @@ export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
               </svg>
             </button>
           )}
-          <button
-            onClick={() => setShowInfo(!showInfo)}
-            className="text-xs text-slate-400 hover:text-slate-600 px-2 py-1 rounded hover:bg-slate-50 transition-colors"
-          >
-            Why this chart?
-          </button>
         </div>
       </div>
       <div className="p-2">
