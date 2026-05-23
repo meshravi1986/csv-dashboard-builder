@@ -5,22 +5,23 @@ from datetime import datetime, timedelta
 import httpx
 from fastapi import APIRouter, Depends, HTTPException
 from app.schemas.api import (
-    DashboardResponse, DashboardListResponse, DashboardUpdate, ChartCreateRequest,
+    DashboardResponse, DashboardUpdate, ChartCreateRequest,
     FilterSuggestResponse, DimensionFilterConfig, DateFilterConfig, DatePreset,
-    ChartDataRequest, VersionCreateRequest, ColumnMatchResult, VersionInfo,
+    ChartDataRequest, ActiveFilter, VersionCreateRequest, ColumnMatchResult, VersionInfo,
     TabCreate, TabUpdate, TabResponse,
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
 from app.utils.duckdb import get_duckdb
 from app.services.dashboard import build_dashboard
-from app.services.upload import get_parquet_path, get_dataset_columns
+from app.services.upload import get_parquet_path, get_dataset_columns, get_dataset
 from app.engine.visualization import query_chart_data, query_chart_data_batch
 from app.config import settings
 
 from pydantic import BaseModel
 
-router = APIRouter(prefix="/api/v1", tags=["dashboards"])
+router = APIRouter(prefix="/api/v1/dashboards", tags=["dashboards"])
+datasets_router = APIRouter(prefix="/api/v1/datasets", tags=["dashboards"])
 
 SUPABASE_REST_URL = settings.supabase_url.rstrip("/") + "/rest/v1"
 
@@ -38,24 +39,35 @@ def _rest_headers():
     }
 
 
+_HAS_VERSIONING: bool | None = None
+
+
 def _has_versioning_columns(supabase) -> bool:
-    """Check if the dashboards table has versioning columns."""
+    global _HAS_VERSIONING
+    if _HAS_VERSIONING is not None:
+        return _HAS_VERSIONING
     try:
         supabase.table("dashboards").select("version_group_id").limit(1).execute()
-        return True
+        _HAS_VERSIONING = True
     except Exception:
-        return False
+        _HAS_VERSIONING = False
+    return _HAS_VERSIONING
 
 
-def get_dataset(dataset_id: str, user_id: str):
-    supabase = get_supabase()
-    result = supabase.table("datasets").select("*").eq("id", dataset_id).eq("user_id", user_id).execute()
-    if not result.data:
-        raise HTTPException(status_code=404, detail="Dataset not found")
-    return result.data[0]
+def _build_filters_dict(filters: list[ActiveFilter]) -> dict:
+    fd = {}
+    for f in filters:
+        entry = {"type": f.type}
+        if f.type == "dimension":
+            entry["values"] = f.values or []
+        elif f.type == "date":
+            entry["start"] = f.start or ""
+            entry["end"] = f.end or ""
+        fd[f.field_name] = entry
+    return fd or None
 
 
-@router.post("/datasets/{dataset_id}/dashboard/generate")
+@datasets_router.post("/{dataset_id}/dashboard/generate")
 def generate_dashboard(
     dataset_id: str,
     user: dict = Depends(get_current_user),
@@ -114,7 +126,8 @@ def generate_dashboard(
                     resp = client.post(url, headers=headers, json=payload)
                     if resp.status_code < 400:
                         return resp
-                    raise HTTPException(status_code=500, detail=f"{label} failed: {resp.text}")
+                    print(f"[{label}] Supabase API error (status {resp.status_code})", flush=True)
+                    raise HTTPException(status_code=500, detail=f"{label} failed (status {resp.status_code})")
                 except httpx.TimeoutException:
                     if attempt < 1:
                         continue
@@ -189,7 +202,7 @@ def generate_dashboard(
     return dashboard
 
 
-@router.get("/dashboards")
+@router.get("")
 def list_dashboards(
     user: dict = Depends(get_current_user),
 ):
@@ -212,12 +225,21 @@ def list_dashboards(
                 version_tags[vgid] = d["tag"]
                 version_tags[vgid + "_vn"] = d.get("version_number") or 1
 
+    # Batch-fetch all chart_specs for all dashboards
+    all_ids = list({d["id"] for d in groups.values()})
+    all_charts = {}
+    if all_ids:
+        from postgrest import AioHttpClient as _  # ensure sync
+        for chunk in [all_ids[i:i+20] for i in range(0, len(all_ids), 20)]:
+            chunk_result = supabase.table("chart_specs").select("*").in_("dashboard_id", chunk).order("order").execute()
+            for c in (chunk_result.data or []):
+                all_charts.setdefault(c["dashboard_id"], []).append(c)
+
     dashboards = []
     for vgid, d in groups.items():
-        charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", d["id"]).order("order").execute()
         dashboards.append({
             **d,
-            "charts": charts_result.data,
+            "charts": all_charts.get(d["id"], []),
             "version_count": version_counts.get(vgid, 1),
             "version_group_id": vgid,
             "latest_tag": version_tags.get(vgid),
@@ -226,7 +248,7 @@ def list_dashboards(
     return {"dashboards": dashboards}
 
 
-@router.get("/dashboards/by-group/{version_group_id}/versions")
+@router.get("/by-group/{version_group_id}/versions")
 def list_dashboard_versions(
     version_group_id: str,
     user: dict = Depends(get_current_user),
@@ -238,19 +260,26 @@ def list_dashboard_versions(
     if not result.data:
         raise HTTPException(status_code=404, detail="No versions found")
 
+    all_ids = [d["id"] for d in result.data]
+    all_charts = {}
+    if all_ids:
+        for chunk in [all_ids[i:i+20] for i in range(0, len(all_ids), 20)]:
+            chunk_result = supabase.table("chart_specs").select("*").in_("dashboard_id", chunk).order("order").execute()
+            for c in (chunk_result.data or []):
+                all_charts.setdefault(c["dashboard_id"], []).append(c)
+
     versions = []
     for d in result.data:
-        charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", d["id"]).order("order").execute()
         versions.append({
             **d,
-            "charts": charts_result.data,
-            "charts_count": len(charts_result.data),
+            "charts": all_charts.get(d["id"], []),
+            "charts_count": len(all_charts.get(d["id"], [])),
         })
 
     return {"versions": versions}
 
 
-@router.post("/dashboards/{dashboard_id}/create-version")
+@router.post("/{dashboard_id}/create-version")
 def create_dashboard_version(
     dashboard_id: str,
     req: VersionCreateRequest,
@@ -269,7 +298,8 @@ def create_dashboard_version(
                     resp = client.post(url, headers=headers, json=payload)
                     if resp.status_code < 400:
                         return resp
-                    raise HTTPException(status_code=500, detail=f"{label} failed: {resp.text}")
+                    print(f"[{label}] Supabase API error (status {resp.status_code})", flush=True)
+                    raise HTTPException(status_code=500, detail=f"{label} failed (status {resp.status_code})")
                 except httpx.TimeoutException:
                     if attempt < 1:
                         continue
@@ -292,30 +322,40 @@ def create_dashboard_version(
     max_vn = supabase.table("dashboards").select("version_number").eq("version_group_id", version_group_id).eq("user_id", user["id"]).order("version_number", desc=True).limit(1).execute()
     next_vn = (max_vn.data[0]["version_number"] + 1) if max_vn.data else 2
 
-    # Copy semantics from source dataset to new dataset
+    # Copy semantics from source dataset to new dataset (batch insert)
     semantic_result = supabase.table("semantic_fields").select("*").eq("dataset_id", source_dataset_id).execute()
-    for sf in semantic_result.data:
-        supabase.table("semantic_fields").insert({
-            "dataset_id": new_dataset_id,
-            "field_name": sf["field_name"],
-            "role": sf["role"],
-            "aggregation": sf.get("aggregation"),
-            "formatting": sf.get("formatting"),
-            "description": sf.get("description"),
-        }).execute()
+    if semantic_result.data:
+        sem_rows = [
+            {
+                "id": str(uuid.uuid4()),
+                "dataset_id": new_dataset_id,
+                "field_name": sf["field_name"],
+                "role": sf["role"],
+                "aggregation": sf.get("aggregation"),
+                "formatting": sf.get("formatting"),
+                "description": sf.get("description"),
+            }
+            for sf in semantic_result.data
+        ]
+        supabase.table("semantic_fields").insert(sem_rows).execute()
 
-    # Copy metrics from source dataset to new dataset
+    # Copy metrics from source dataset to new dataset (batch insert)
     metrics_result = supabase.table("metrics").select("*").eq("dataset_id", source_dataset_id).execute()
-    for m in metrics_result.data:
-        supabase.table("metrics").insert({
-            "dataset_id": new_dataset_id,
-            "user_id": user["id"],
-            "name": m["name"],
-            "expression": m["expression"],
-            "aggregation": m["aggregation"],
-            "field_name": m["field_name"],
-            "formula": m.get("formula"),
-        }).execute()
+    if metrics_result.data:
+        met_rows = [
+            {
+                "id": str(uuid.uuid4()),
+                "dataset_id": new_dataset_id,
+                "user_id": user["id"],
+                "name": m["name"],
+                "expression": m["expression"],
+                "aggregation": m["aggregation"],
+                "field_name": m["field_name"],
+                "formula": m.get("formula"),
+            }
+            for m in metrics_result.data
+        ]
+        supabase.table("metrics").insert(met_rows).execute()
 
     # Create new dashboard
     new_dash_id = str(uuid.uuid4())
@@ -371,7 +411,7 @@ def create_dashboard_version(
     }
 
 
-@router.get("/datasets/{dataset_id}/column-match")
+@datasets_router.get("/{dataset_id}/column-match")
 def check_column_match(
     dataset_id: str,
     user: dict = Depends(get_current_user),
@@ -430,7 +470,7 @@ def check_column_match(
     return {"matches": matches}
 
 
-@router.get("/dashboards/{dashboard_id}")
+@router.get("/{dashboard_id}")
 def get_dashboard(
     dashboard_id: str,
     user: dict = Depends(get_current_user),
@@ -448,9 +488,12 @@ def get_dashboard(
     dataset = supabase.table("datasets").select("parquet_path").eq("id", dashboard["dataset_id"]).execute()
     parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
 
+    if parquet_path and charts_result.data:
+        chart_data_list = query_chart_data_batch(charts_result.data, parquet_path)
+    else:
+        chart_data_list = [{"labels": [], "values": []} for _ in charts_result.data]
     charts = []
-    for chart in charts_result.data:
-        chart_data = query_chart_data(chart, parquet_path) if parquet_path else {"labels": [], "values": []}
+    for chart, chart_data in zip(charts_result.data, chart_data_list):
         chart["data"] = chart_data
         charts.append(chart)
 
@@ -466,7 +509,7 @@ def get_dashboard(
     return dashboard
 
 
-@router.put("/dashboards/{dashboard_id}", response_model=DashboardResponse)
+@router.put("/{dashboard_id}", response_model=DashboardResponse)
 def update_dashboard(
     dashboard_id: str,
     update: DashboardUpdate,
@@ -514,7 +557,7 @@ def update_dashboard(
     return get_dashboard(dashboard_id, user)
 
 
-@router.delete("/dashboards/{dashboard_id}")
+@router.delete("/{dashboard_id}")
 def delete_dashboard(
     dashboard_id: str,
     user: dict = Depends(get_current_user),
@@ -540,7 +583,7 @@ def delete_dashboard(
     return {"status": "success", "deleted": len(ids)}
 
 
-@router.get("/dashboards/{dashboard_id}/available-fields")
+@router.get("/{dashboard_id}/available-fields")
 def get_available_fields(
     dashboard_id: str,
     user: dict = Depends(get_current_user),
@@ -615,7 +658,7 @@ def _generate_date_presets(min_date: str, max_date: str) -> list[DatePreset]:
     return presets
 
 
-@router.get("/dashboards/{dashboard_id}/filters/suggest", response_model=FilterSuggestResponse)
+@router.get("/{dashboard_id}/filters/suggest", response_model=FilterSuggestResponse)
 def suggest_filters(
     dashboard_id: str,
     user: dict = Depends(get_current_user),
@@ -644,7 +687,8 @@ def suggest_filters(
                 continue
 
             if role == "date":
-                row = conn.execute(f'SELECT MIN("{field_name}"), MAX("{field_name}") FROM \'{parquet_path}\'').fetchone()
+                q_field = safe_quote_ident(field_name)
+                row = conn.execute(f'SELECT MIN({q_field}), MAX({q_field}) FROM read_parquet(?)', [parquet_path]).fetchone()
                 min_date, max_date = row
                 if not min_date or not max_date:
                     continue
@@ -665,12 +709,13 @@ def suggest_filters(
             if _TEXT_BLOB_PATTERN.match(field_name):
                 continue
 
-            cardinality = conn.execute(f'SELECT COUNT(DISTINCT "{field_name}") FROM \'{parquet_path}\'').fetchone()[0]
+            q_field = safe_quote_ident(field_name)
+            cardinality = conn.execute(f'SELECT COUNT(DISTINCT {q_field}) FROM read_parquet(?)', [parquet_path]).fetchone()[0]
             if cardinality > 500:
                 continue
 
             limit = min(cardinality, 500)
-            rows = conn.execute(f'SELECT DISTINCT "{field_name}" FROM \'{parquet_path}\' WHERE "{field_name}" IS NOT NULL ORDER BY "{field_name}" LIMIT {limit}').fetchall()
+            rows = conn.execute(f'SELECT DISTINCT {q_field} FROM read_parquet(?) WHERE {q_field} IS NOT NULL ORDER BY {q_field} LIMIT ?', [parquet_path, limit]).fetchall()
             values = [{"label": str(r[0]), "value": str(r[0])} for r in rows]
 
             suggestions.append(DimensionFilterConfig(
@@ -686,7 +731,7 @@ def suggest_filters(
     return {"filters": suggestions}
 
 
-@router.post("/dashboards/{dashboard_id}/charts")
+@router.post("/{dashboard_id}/charts")
 def add_chart(
     dashboard_id: str,
     chart: ChartCreateRequest,
@@ -762,12 +807,12 @@ def add_chart(
     with httpx.Client(timeout=15.0) as client:
         resp = client.post(f"{SUPABASE_REST_URL}/chart_specs", headers=headers, json=chart_payload)
         if resp.status_code >= 400:
-            raise HTTPException(status_code=500, detail=f"Chart insert failed: {resp.text}")
+            raise HTTPException(status_code=500, detail="Chart insert failed")
 
     return {**chart_payload, "data": chart_data}
 
 
-@router.delete("/dashboards/{dashboard_id}/charts/{chart_id}")
+@router.delete("/{dashboard_id}/charts/{chart_id}")
 def delete_chart(
     dashboard_id: str,
     chart_id: str,
@@ -782,7 +827,7 @@ def delete_chart(
     return {"status": "success"}
 
 
-@router.post("/dashboards/{dashboard_id}/charts/{chart_id}/data")
+@router.post("/{dashboard_id}/charts/{chart_id}/data")
 def get_chart_data_filtered(
     dashboard_id: str,
     chart_id: str,
@@ -801,21 +846,11 @@ def get_chart_data_filtered(
     dataset = supabase.table("datasets").select("parquet_path").eq("id", dash_result.data[0]["dataset_id"]).execute()
     parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
 
-    filters_dict = {}
-    for f in request.filters:
-        fd = {"type": f.type}
-        if f.type == "dimension":
-            fd["values"] = f.values or []
-        elif f.type == "date":
-            fd["start"] = f.start or ""
-            fd["end"] = f.end or ""
-        filters_dict[f.field_name] = fd
-
-    chart_data = query_chart_data(chart_result.data[0], parquet_path, filters=filters_dict or None)
+    chart_data = query_chart_data(chart_result.data[0], parquet_path, filters=_build_filters_dict(request.filters))
     return chart_data
 
 
-@router.post("/dashboards/{dashboard_id}/data")
+@router.post("/{dashboard_id}/data")
 def get_dashboard_data_filtered(
     dashboard_id: str,
     request: ChartDataRequest,
@@ -832,21 +867,11 @@ def get_dashboard_data_filtered(
     dataset = supabase.table("datasets").select("parquet_path").eq("id", dash_result.data[0]["dataset_id"]).execute()
     parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
 
-    filters_dict = {}
-    for f in request.filters:
-        fd = {"type": f.type}
-        if f.type == "dimension":
-            fd["values"] = f.values or []
-        elif f.type == "date":
-            fd["start"] = f.start or ""
-            fd["end"] = f.end or ""
-        filters_dict[f.field_name] = fd
-
-    all_data = query_chart_data_batch(chart_specs, parquet_path, filters=filters_dict or None)
+    all_data = query_chart_data_batch(chart_specs, parquet_path, filters=_build_filters_dict(request.filters))
     return {chart["id"]: data for chart, data in zip(chart_specs, all_data)}
 
 
-@router.put("/dashboards/{dashboard_id}/charts/reorder")
+@router.put("/{dashboard_id}/charts/reorder")
 def reorder_charts(
     dashboard_id: str,
     request: ReorderRequest,
@@ -864,7 +889,7 @@ def reorder_charts(
     return {"status": "success"}
 
 
-@router.post("/dashboards/{dashboard_id}/tabs", response_model=TabResponse)
+@router.post("/{dashboard_id}/tabs", response_model=TabResponse)
 def create_tab(
     dashboard_id: str,
     body: TabCreate,
@@ -891,11 +916,11 @@ def create_tab(
     with httpx.Client(timeout=15.0) as client:
         resp = client.post(f"{SUPABASE_REST_URL}/dashboard_tabs", headers=headers, json=payload)
         if resp.status_code >= 400:
-            raise HTTPException(status_code=500, detail=f"Tab insert failed: {resp.text}")
+            raise HTTPException(status_code=500, detail="Tab insert failed")
     return payload
 
 
-@router.put("/dashboards/tabs/{tab_id}", response_model=TabResponse)
+@router.put("/tabs/{tab_id}", response_model=TabResponse)
 def rename_tab(
     tab_id: str,
     body: TabUpdate,
@@ -909,15 +934,14 @@ def rename_tab(
     dash_id = tab_result.data[0]["dashboard_id"]
     dash_result = supabase.table("dashboards").select("id").eq("id", dash_id).eq("user_id", user["id"]).execute()
     if not dash_result.data:
-        raise HTTPException(status_code=404, detail="Dashboard not found")
+        raise HTTPException(status_code=404, detail="Tab not found")
 
-    now = datetime.utcnow().isoformat()
     supabase.table("dashboard_tabs").update({"title": body.title}).eq("id", tab_id).execute()
     tab_result.data[0]["title"] = body.title
     return tab_result.data[0]
 
 
-@router.delete("/dashboards/tabs/{tab_id}")
+@router.delete("/tabs/{tab_id}")
 def delete_tab(
     tab_id: str,
     user: dict = Depends(get_current_user),
@@ -930,7 +954,7 @@ def delete_tab(
     dash_id = tab_result.data[0]["dashboard_id"]
     dash_result = supabase.table("dashboards").select("id").eq("id", dash_id).eq("user_id", user["id"]).execute()
     if not dash_result.data:
-        raise HTTPException(status_code=404, detail="Dashboard not found")
+        raise HTTPException(status_code=404, detail="Tab not found")
 
     supabase.table("chart_specs").delete().eq("tab_id", tab_id).execute()
     supabase.table("dashboard_tabs").delete().eq("id", tab_id).execute()

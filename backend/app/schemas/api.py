@@ -171,34 +171,6 @@ class VersionInfo(BaseModel):
     created_at: str
     charts_count: int
 
-class QueryRequest(BaseModel):
-    dataset_id: str
-    query: str
-
-
-class QueryResponse(BaseModel):
-    columns: List[str]
-    rows: List[List[Any]]
-    row_count: int
-
-
-class DatasetResponse(BaseModel):
-    id: str
-    user_id: str
-    name: str
-    original_filename: str
-    parquet_path: str
-    row_count: int
-    column_count: int
-    file_size: int
-    status: str
-    created_at: str
-    updated_at: str
-
-
-class ErrorResponse(BaseModel):
-    detail: str
-
 
 class SuggestSQLRequest(BaseModel):
     description: str
@@ -254,11 +226,3 @@ class ActiveFilter(BaseModel):
 
 class ChartDataRequest(BaseModel):
     filters: List[ActiveFilter] = []
-
-
-class BatchChartDataRequest(BaseModel):
-    filters: List[ActiveFilter] = []
-
-
-class BatchChartDataResponse(BaseModel):
-    charts: Dict[str, Any]

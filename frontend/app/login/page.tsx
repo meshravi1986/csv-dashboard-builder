@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { supabase } from "@/lib/supabase";
 
 export default function LoginPage() {
@@ -13,6 +14,10 @@ export default function LoginPage() {
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [attempts, setAttempts] = useState(0);
+  const [cooldown, setCooldown] = useState(0);
+
+  const MIN_PIN_LENGTH = 6;
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -20,13 +25,19 @@ export default function LoginPage() {
     setSuccess("");
     setLoading(true);
 
-    try {
-      if (pin.length !== 6 || !/^\d{6}$/.test(pin)) {
-        setError("PIN must be exactly 6 digits");
-        setLoading(false);
-        return;
-      }
+    if (cooldown > 0) {
+      setError(`Too many attempts. Please wait ${cooldown}s.`);
+      setLoading(false);
+      return;
+    }
 
+    if (pin.length < MIN_PIN_LENGTH || !/^\d+$/.test(pin)) {
+      setError(`PIN must be at least ${MIN_PIN_LENGTH} digits`);
+      setLoading(false);
+      return;
+    }
+
+    try {
       if (mode === "signup") {
         if (!name.trim()) {
           setError("Name is required");
@@ -44,13 +55,30 @@ export default function LoginPage() {
         setSuccess("Account created! Please sign in with your email and PIN.");
         setName("");
         setPin("");
+        setAttempts(0);
       } else {
         const { data, error: signInError } =
           await supabase.auth.signInWithPassword({
             email,
             password: pin,
           });
-        if (signInError) throw signInError;
+        if (signInError) {
+          const newAttempts = attempts + 1;
+          setAttempts(newAttempts);
+          if (newAttempts >= 5) {
+            const waitTime = Math.min(30 * (newAttempts - 4), 300);
+            setCooldown(waitTime);
+            const interval = setInterval(() => {
+              setCooldown((prev) => {
+                if (prev <= 1) { clearInterval(interval); return 0; }
+                return prev - 1;
+              });
+            }, 1000);
+            setAttempts(0);
+          }
+          throw signInError;
+        }
+        setAttempts(0);
         if (data.session) router.push("/dashboards");
       }
     } catch (err: any) {
@@ -80,9 +108,11 @@ export default function LoginPage() {
                 />
               </svg>
             </div>
-            <h1 className="text-2xl font-semibold text-slate-900">
-              CSV Dashboard Builder
-            </h1>
+            <Link href="/" className="inline-block">
+              <h1 className="text-2xl font-semibold text-slate-900 hover:text-slate-600 transition-colors">
+                CSV Dashboard Builder
+              </h1>
+            </Link>
             <p className="text-sm text-slate-500">
               {mode === "signin"
                 ? "Sign in with your email and PIN"
@@ -121,23 +151,23 @@ export default function LoginPage() {
 
             <div>
               <label className="text-xs text-slate-400 font-medium uppercase tracking-wider">
-                6-Digit PIN
+                PIN (min. {MIN_PIN_LENGTH} digits)
               </label>
               <input
                 type="password"
                 value={pin}
                 onChange={(e) =>
-                  setPin(e.target.value.replace(/\D/g, "").slice(0, 6))
+                  setPin(e.target.value.replace(/\D/g, ""))
                 }
-                placeholder="Enter 6-digit PIN"
-                maxLength={6}
+                placeholder={`Enter ${MIN_PIN_LENGTH}+ digit PIN`}
                 inputMode="numeric"
+                autoComplete={mode === "signup" ? "new-password" : "current-password"}
                 className="mt-1 w-full px-3 py-2.5 rounded-lg border border-slate-200 text-sm focus:outline-none focus:ring-2 focus:ring-slate-900/20 tracking-[0.5em] text-center"
               />
               <p className="text-xs text-slate-400 mt-1">
                 {mode === "signup"
-                  ? "Choose any 6-digit PIN you'll remember"
-                  : "Enter the 6-digit PIN you chose at signup"}
+                  ? `Choose any ${MIN_PIN_LENGTH}+ digit PIN you'll remember`
+                  : `Enter the PIN you chose at signup`}
               </p>
             </div>
 
@@ -154,10 +184,12 @@ export default function LoginPage() {
 
             <button
               type="submit"
-              disabled={loading || !email || pin.length !== 6}
+              disabled={loading || !email || pin.length < MIN_PIN_LENGTH || cooldown > 0}
               className="w-full px-4 py-2.5 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
             >
-              {loading
+              {cooldown > 0
+                ? `Wait ${cooldown}s...`
+                : loading
                 ? "Please wait..."
                 : mode === "signin"
                 ? "Sign In"

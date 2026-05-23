@@ -13,7 +13,7 @@ from app.schemas.api import (
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
-from app.api.dashboards import get_dataset
+from app.services.upload import get_dataset
 from app.engine.profiling import profile_dataset
 from app.services.upload import get_parquet_path
 from app.services.semantic import get_ai_semantic_suggestions
@@ -116,6 +116,14 @@ def update_semantics(
     if existing.data:
         supabase.table("semantic_fields").delete().eq("dataset_id", dataset_id).execute()
 
+    # Supabase CHECK constraint only allows SUM, AVG, COUNT
+    _ALLOWED_AGG = {"SUM", "AVG", "COUNT"}
+
+    def _safe_aggregation(agg: str | None) -> str | None:
+        if agg is not None and agg not in _ALLOWED_AGG:
+            return "COUNT"
+        return agg
+
     now = datetime.utcnow().isoformat()
     for field in request.fields:
         supabase.table("semantic_fields").insert({
@@ -123,7 +131,7 @@ def update_semantics(
             "dataset_id": dataset_id,
             "field_name": field.field_name,
             "role": field.role,
-            "aggregation": field.aggregation,
+            "aggregation": _safe_aggregation(field.aggregation),
             "formatting": field.formatting,
             "created_at": now,
             "updated_at": now,
@@ -162,18 +170,32 @@ def preview_metric_sql(
     dataset = get_dataset(dataset_id, user["id"])
     parquet_path = get_parquet_path(dataset["parquet_path"])
 
+    _DANGEROUS = ["CREATE", "DROP", "ALTER", "INSERT", "UPDATE", "DELETE",
+                  "ATTACH", "DETACH", "INSTALL", "LOAD", "PRAGMA", "SET",
+                  "read_text", "read_blob", "read_file", "glob",
+                  "write_text", "write_csv", "write_parquet"]
+
     try:
         with get_duckdb() as conn:
             sql = request.sql.strip()
+            for kw in _DANGEROUS:
+                if kw in sql.upper() and kw not in ("SELECT",):
+                    raise ValueError(f"Disallowed SQL keyword: {kw}")
+                if kw in ("read_text", "read_blob", "read_file", "glob",
+                          "write_text", "write_csv", "write_parquet"):
+                    if kw in sql.lower():
+                        raise ValueError(f"Disallowed SQL function: {kw}")
+
             if sql.upper().startswith("SELECT"):
                 result = conn.execute(sql).fetchone()
             else:
-                sql = f"SELECT {sql} as value FROM '{parquet_path}'"
-                result = conn.execute(sql).fetchone()
+                safe_sql = f"SELECT {sql} as value FROM read_parquet(?)"
+                result = conn.execute(safe_sql, [parquet_path]).fetchone()
             val = float(result[0]) if result and result[0] is not None else None
             return {"value": val, "error": None}
     except Exception as e:
-        return {"value": None, "error": str(e)}
+        print(f"[preview_metric_sql] SQL preview error: {e}", flush=True)
+        return {"value": None, "error": "SQL preview failed"}
 
 
 @router.get("/metrics/all")

@@ -1,15 +1,31 @@
 import polars as pl
 import threading
+from collections import OrderedDict
 from typing import Any, Dict, List, Optional
 from app.utils.duckdb import get_profile_stats
 
-_profile_cache: Dict[str, Dict[str, Any]] = {}
+_cache_maxsize = 50
+_profile_cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
 _profile_in_flight: Dict[str, threading.Event] = {}
 _profile_in_flight_lock = threading.Lock()
 
 
+def _cache_set(key: str, value: Dict[str, Any]):
+    global _profile_cache
+    _profile_cache[key] = value
+    if len(_profile_cache) > _cache_maxsize:
+        _profile_cache.popitem(last=False)
+
+
+def _cache_get(key: str) -> Optional[Dict[str, Any]]:
+    val = _profile_cache.get(key)
+    if val is not None:
+        _profile_cache.move_to_end(key)
+    return val
+
+
 def profile_dataset(parquet_path: str, dataset_id: Optional[str] = None) -> Dict[str, Any]:
-    if dataset_id and dataset_id in _profile_cache:
+    if dataset_id and _cache_get(dataset_id):
         return _profile_cache[dataset_id]
 
     if dataset_id:
@@ -17,8 +33,9 @@ def profile_dataset(parquet_path: str, dataset_id: Optional[str] = None) -> Dict
             if dataset_id in _profile_in_flight:
                 event = _profile_in_flight[dataset_id]
                 event.wait()
-                if dataset_id in _profile_cache:
-                    return _profile_cache[dataset_id]
+                cached = _cache_get(dataset_id)
+                if cached:
+                    return cached
             else:
                 event = threading.Event()
                 _profile_in_flight[dataset_id] = event
@@ -46,7 +63,7 @@ def profile_dataset(parquet_path: str, dataset_id: Optional[str] = None) -> Dict
             field["is_date"] = field["detected_type"] == "date"
 
         if dataset_id:
-            _profile_cache[dataset_id] = profile
+            _cache_set(dataset_id, profile)
 
         return profile
     finally:
@@ -62,5 +79,6 @@ def clear_profile_cache(dataset_id: str):
 
 
 def count_rows(parquet_path: str) -> int:
-    df = pl.read_parquet(parquet_path)
-    return len(df)
+    from app.utils.duckdb import get_duckdb
+    with get_duckdb() as conn:
+        return conn.execute("SELECT COUNT(*) FROM read_parquet(?)", [parquet_path]).fetchone()[0]

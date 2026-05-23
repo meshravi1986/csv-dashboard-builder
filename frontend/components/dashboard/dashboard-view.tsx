@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { ChartCard } from "./chart-card";
 import type { ChartSpec } from "@/types";
 import { api } from "@/services/api";
@@ -69,6 +69,36 @@ function SortableChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormat
   );
 }
 
+const SortableGroup = memo(function SortableGroup({
+  title, charts, className, colorScheme, fieldFormats, onDelete, onExpand, onDragEnd
+}: {
+  title: string | null;
+  charts: ChartSpec[];
+  className: string;
+  colorScheme?: string;
+  fieldFormats?: Record<string, string>;
+  onDelete: (id: string) => void;
+  onExpand?: (chart: ChartSpec) => void;
+  onDragEnd: (event: DragEndEvent) => void;
+}) {
+  if (charts.length === 0) return null;
+  return (
+    <DndContext sensors={useSensors(
+      useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+      useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    )} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+      <SortableContext items={charts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+        {title && <h3 className="text-sm font-medium text-slate-700 mb-3">{title}</h3>}
+        <div className={className}>
+          {charts.map((chart) => (
+            <SortableChartCard key={chart.id} chart={chart} onDelete={onDelete} onExpand={onExpand} colorScheme={colorScheme} fieldFormats={fieldFormats} />
+          ))}
+        </div>
+      </SortableContext>
+    </DndContext>
+  );
+});
+
 export function DashboardView({ dashboard, onRefresh, onExpandChart }: DashboardViewProps) {
   const [charts, setCharts] = useState<ChartSpec[]>(dashboard.charts || []);
 
@@ -105,45 +135,43 @@ export function DashboardView({ dashboard, onRefresh, onExpandChart }: Dashboard
     }
   }, [dashboard.id]);
 
-  const handleGroupDragEnd = (groupCharts: ChartSpec[]) => async (event: DragEndEvent) => {
+  const handleGroupDragEnd = useCallback((event: DragEndEvent) => {
     const { active, over } = event;
     if (!over || active.id === over.id) return;
 
-    const oldIndex = groupCharts.findIndex((c) => c.id === active.id);
-    const newIndex = groupCharts.findIndex((c) => c.id === over.id);
-    if (oldIndex === -1 || newIndex === -1) return;
-
-    const moved = arrayMove(groupCharts, oldIndex, newIndex);
-    const updated = moved.map((c, i) => ({ ...c, order: i }));
-
     setCharts((prev) => {
+      const groupCharts = prev.filter((c) => c.chart_type !== "kpi");
+      const oldIndex = groupCharts.findIndex((c) => c.id === active.id);
+      const newIndex = groupCharts.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const moved = arrayMove(groupCharts, oldIndex, newIndex);
+      const updated = moved.map((c, i) => ({ ...c, order: i }));
       const map = new Map(prev.map((c) => [c.id, c]));
       for (const c of updated) map.set(c.id, c);
+      persistOrder(updated);
       return Array.from(map.values());
     });
+  }, [persistOrder]);
 
-    await persistOrder(updated);
-  };
+  const handleKPIDragEnd = useCallback((event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
 
-  const renderSortableGroup = (title: string | null, groupCharts: ChartSpec[], className: string) => {
-    if (groupCharts.length === 0) return null;
-    return (
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragEnd={handleGroupDragEnd(groupCharts)}
-      >
-        <SortableContext items={groupCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
-          {title && <h3 className="text-sm font-medium text-slate-700 mb-3">{title}</h3>}
-          <div className={className}>
-            {groupCharts.map((chart) => (
-              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} onExpand={onExpandChart} colorScheme={dashboard.color_scheme} fieldFormats={dashboard.field_formats} />
-            ))}
-          </div>
-        </SortableContext>
-      </DndContext>
-    );
-  };
+    setCharts((prev) => {
+      const groupCharts = prev.filter((c) => c.chart_type === "kpi");
+      const oldIndex = groupCharts.findIndex((c) => c.id === active.id);
+      const newIndex = groupCharts.findIndex((c) => c.id === over.id);
+      if (oldIndex === -1 || newIndex === -1) return prev;
+
+      const moved = arrayMove(groupCharts, oldIndex, newIndex);
+      const updated = moved.map((c, i) => ({ ...c, order: i }));
+      const map = new Map(prev.map((c) => [c.id, c]));
+      for (const c of updated) map.set(c.id, c);
+      persistOrder(updated);
+      return Array.from(map.values());
+    });
+  }, [persistOrder]);
 
   if (charts.length === 0) {
     return (
@@ -155,9 +183,18 @@ export function DashboardView({ dashboard, onRefresh, onExpandChart }: Dashboard
 
   return (
     <div className="space-y-6">
-      {renderSortableGroup(null, kpiCards, "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4")}
+      <SortableGroup
+        title={null}
+        charts={kpiCards}
+        className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4"
+        colorScheme={dashboard.color_scheme}
+        fieldFormats={dashboard.field_formats}
+        onDelete={handleDeleteChart}
+        onExpand={onExpandChart}
+        onDragEnd={handleKPIDragEnd}
+      />
       {otherCharts.length > 0 && (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd(otherCharts)}>
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd}>
           <SortableContext items={otherCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {otherCharts.map((chart) => (

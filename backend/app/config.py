@@ -8,7 +8,6 @@ class Settings(BaseSettings):
     supabase_limited_key: str = ""
     supabase_anon_key: str = ""
     openai_api_key: str = ""
-    database_url: str = ""
     app_secret: str = ""
     cors_origins: str = "http://localhost:3000"
     storage_bucket: str = "datasets"
@@ -21,6 +20,7 @@ class Settings(BaseSettings):
 
     class Config:
         env_file = ".env"
+        extra = "ignore"
 
 
 settings = Settings()

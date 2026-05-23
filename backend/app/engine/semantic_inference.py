@@ -82,6 +82,38 @@ COUNT_PATTERNS = re.compile(
 )
 
 
+_EMAIL_PATTERN = re.compile(r"^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$")
+_UUID_PATTERN = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_PHONE_PATTERN = re.compile(r"^\+?[\d\s\-().]{7,20}$")
+_ISO_DATE_PATTERN = re.compile(
+    r"^\d{4}[-/]\d{1,2}[-/]\d{1,2}$|"       # YYYY-MM-DD or YYYY/MM/DD
+    r"^\d{1,2}[-/]\d{1,2}[-/]\d{4}$|"        # MM/DD/YYYY or DD/MM/YYYY
+    r"^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}"        # ISO 8601
+)
+_URL_PATTERN = re.compile(r"^(https?://|www\.)[A-Za-z0-9./?=_-]+$")
+_JSON_PATTERN = re.compile(r"^[\s]*[\[{]")
+_COUNTRY_CODES = {
+    "us", "uk", "in", "cn", "jp", "de", "fr", "br", "ca", "au",
+    "ru", "kr", "it", "es", "mx", "id", "nl", "sa", "tr", "ch",
+    "se", "pl", "be", "no", "at", "il", "sg", "hk", "dk", "fi",
+}
+
+
+def _is_float(value: str) -> bool:
+    try:
+        float(value)
+        return True
+    except ValueError:
+        return False
+
+
+def _sample_ratio(sample_values: List[str], predicate) -> float:
+    if not sample_values:
+        return 0.0
+    matches = sum(1 for v in sample_values if predicate(str(v).strip()))
+    return matches / len(sample_values)
+
+
 def _check_currency_samples(sample_values: List[str]) -> bool:
     for v in sample_values:
         v = str(v).strip()
@@ -102,18 +134,19 @@ def _check_percentage_samples(sample_values: List[str]) -> bool:
 
 
 def _check_identifier_samples(sample_values: List[str]) -> bool:
-    numeric_count = 0
-    alphanum_count = 0
-    for v in sample_values:
-        v = str(v).strip()
-        if re.match(r"^\d+$", v):
-            numeric_count += 1
-        elif re.match(r"^[A-Za-z0-9_-]{8,}$", v):
-            alphanum_count += 1
-    if len(sample_values) == 0:
+    if not sample_values:
         return False
-    # If most samples are long alphanumeric strings, likely identifiers
-    if alphanum_count >= len(sample_values) * 0.5 and max(len(str(v)) for v in sample_values) >= 8:
+    n = len(sample_values)
+    email_match = sum(1 for v in sample_values if _EMAIL_PATTERN.match(str(v).strip()))
+    uuid_match = sum(1 for v in sample_values if _UUID_PATTERN.match(str(v).strip()))
+    phone_match = sum(1 for v in sample_values if _PHONE_PATTERN.match(str(v).strip()))
+    if email_match / n >= 0.5 or uuid_match / n >= 0.5 or phone_match / n >= 0.5:
+        return True
+    alphanum_count = sum(
+        1 for v in sample_values
+        if re.match(r"^[A-Za-z0-9_-]{8,}$", str(v).strip())
+    )
+    if alphanum_count >= n * 0.5 and max(len(str(v)) for v in sample_values) >= 8:
         return True
     return False
 
@@ -136,19 +169,21 @@ def infer_semantic_tags(
     if IDENTIFIER_PATTERNS.search(field_name) or _check_identifier_samples(sample_values):
         result["semantic_tags"].append("identifier")
         result["suggested_role"] = "dimension"
-        result["suggested_aggregation"] = "COUNT_DISTINCT"
+        result["suggested_aggregation"] = "COUNT"
         return result
 
     # -- 2. Timestamp / date detection --
     is_date_type = detected_type == "date"
     is_timestamp_name = bool(TIMESTAMP_PATTERNS.fullmatch(field_name)) or bool(TIMESTAMP_SUFFIX_PATTERNS.search(field_name))
-    if is_date_type or is_timestamp_name:
+    has_date_samples = _sample_ratio(sample_values, lambda v: bool(_ISO_DATE_PATTERN.match(v))) >= 0.5
+    if is_date_type or is_timestamp_name or has_date_samples:
         result["semantic_tags"].append("timestamp")
         result["suggested_role"] = "date"
         return result
 
     # -- 3. Geography --
-    if GEOGRAPHY_PATTERNS.fullmatch(field_name):
+    has_country_samples = _sample_ratio(sample_values, lambda v: v.lower() in _COUNTRY_CODES) >= 0.5
+    if GEOGRAPHY_PATTERNS.fullmatch(field_name) or has_country_samples:
         result["semantic_tags"].append("geography")
         result["suggested_role"] = "dimension"
         return result
@@ -162,7 +197,11 @@ def infer_semantic_tags(
         return result
 
     # -- 5. Percentage (by name or sample values) --
-    if PERCENTAGE_NAME_PATTERNS.search(field_name) or _check_percentage_samples(sample_values):
+    has_ratio_samples = (
+        detected_type == "numeric"
+        and _sample_ratio(sample_values, lambda v: _is_float(v) and 0 <= float(v) <= 1) >= 0.8
+    )
+    if PERCENTAGE_NAME_PATTERNS.search(field_name) or _check_percentage_samples(sample_values) or has_ratio_samples:
         result["semantic_tags"].append("percentage")
         result["suggested_role"] = "measure"
         result["suggested_aggregation"] = "AVG"
@@ -196,7 +235,11 @@ def infer_semantic_tags(
         return result
 
     # -- 10. Text / description (likely not useful for charts) --
-    if TEXT_PATTERNS.fullmatch(field_name):
+    has_text_samples = _sample_ratio(
+        sample_values,
+        lambda v: bool(_URL_PATTERN.match(v) or _JSON_PATTERN.match(v)),
+    ) >= 0.5
+    if TEXT_PATTERNS.fullmatch(field_name) or has_text_samples:
         result["semantic_tags"].append("categorical")
         result["suggested_role"] = "dimension"
         return result
@@ -207,7 +250,7 @@ def infer_semantic_tags(
         if cardinality > 0 and row_count > 0 and cardinality / row_count > 0.5:
             result["semantic_tags"].append("identifier")
             result["suggested_role"] = "dimension"
-            result["suggested_aggregation"] = "COUNT_DISTINCT"
+            result["suggested_aggregation"] = "COUNT"
         else:
             result["semantic_tags"].append("categorical")
             result["suggested_role"] = "measure"

@@ -23,11 +23,22 @@ MAX_FILE_SIZE = settings.max_upload_size_mb * 1024 * 1024
 MAX_COLUMNS = settings.max_csv_columns
 
 
+def get_dataset(dataset_id: str, user_id: str):
+    from app.utils.supabase import get_supabase
+    from fastapi import HTTPException
+    supabase = get_supabase()
+    result = supabase.table("datasets").select("*").eq("id", dataset_id).eq("user_id", user_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=404, detail="Dataset not found")
+    return result.data[0]
+
+
 async def process_upload(file: UploadFile, user_id: str) -> dict:
     if not file.filename or not file.filename.endswith(".csv"):
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
-    temp_path = TEMP_DIR / f"{uuid.uuid4()}_{file.filename}"
+    safe_filename = Path(file.filename).name
+    temp_path = TEMP_DIR / f"{uuid.uuid4()}_{safe_filename}"
     parquet_filename = f"{user_id}/{uuid.uuid4()}.parquet"
     parquet_temp = TEMP_DIR / Path(parquet_filename).name
 
@@ -176,7 +187,6 @@ def get_dataset_columns(dataset_id: str, supabase) -> Optional[set]:
         if ds.data:
             parquet_path = get_parquet_path(ds.data[0]["parquet_path"])
             if parquet_path:
-                import polars as pl
                 schema = pl.read_parquet_schema(parquet_path)
                 return set(c.lower() for c in schema.keys())
     except Exception:

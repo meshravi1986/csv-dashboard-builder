@@ -3,8 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from app.config import settings
 from app.api.upload import router as upload_router
 from app.api.datasets import router as datasets_router
-from app.api.dashboards import router as dashboards_router
-from app.api.query import router as query_router
+from app.api.dashboards import router as dashboards_router, datasets_router as dashboards_datasets_router
 
 app = FastAPI(
     title="CSV Dashboard Builder API",
@@ -25,7 +24,7 @@ app.add_middleware(
 app.include_router(upload_router)
 app.include_router(datasets_router)
 app.include_router(dashboards_router)
-app.include_router(query_router)
+app.include_router(dashboards_datasets_router)
 
 
 @app.get("/api/health")

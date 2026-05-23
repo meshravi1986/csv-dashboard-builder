@@ -1,10 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import dynamic from "next/dynamic";
 import type { ChartSpec } from "@/types";
 import { getPalette } from "@/lib/palettes";
-import { formatValue } from "@/lib/formatters";
+import { getChartOption } from "@/lib/chart-options";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -23,229 +23,16 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormats
   const labels = chart.data?.labels || [];
   const values = chart.data?.values || [];
   const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
-  const xFormat = fieldFormats?.[chart.x_field];
-  const yFormat = fieldFormats?.[chart.y_field];
 
   const formulaTooltip =
     chart.formula
       ? `${chart.title}  ·  Formula: ${chart.formula}`
       : chart.title;
 
-  const fmtAxis = (fmt?: string) => (value: any) => formatValue(value, fmt);
-  const fmtY = fmtAxis(yFormat);
-  const fmtX = fmtAxis(xFormat);
-
-  const getChartOption = () => {
-
-    const base = {
-      backgroundColor: "transparent",
-      animation: false,
-      grid: {
-        left: "3%",
-        right: "4%",
-        bottom: "3%",
-        top: "12%",
-        containLabel: true,
-      },
-      tooltip: {
-        trigger: "axis" as const,
-        backgroundColor: "rgba(255,255,255,0.95)",
-        borderColor: "#e2e8f0",
-        borderWidth: 1,
-        textStyle: { color: "#1e293b", fontSize: 12 },
-      },
-    };
-
-    switch (chart.chart_type) {
-      case "kpi": {
-        const val = typeof values[0] === "number" ? values[0] : null;
-        return {
-          backgroundColor: "transparent",
-          grid: { show: false, left: 0, top: 0, right: 0, bottom: 0 },
-          xAxis: { show: false },
-          yAxis: { show: false },
-          graphic: {
-            type: "text",
-            left: "center",
-            top: "center",
-            style: {
-              text: val !== null ? formatValue(val, yFormat) : "—",
-              fontSize: 36,
-              fontWeight: 600,
-              fill: val !== null ? palette.colors[0] : "#94a3b8",
-            },
-          },
-        };
-      }
-
-      case "line":
-        return {
-          ...base,
-          xAxis: {
-            type: "category" as const,
-            data: labels,
-            axisLine: { lineStyle: { color: "#e2e8f0" } },
-            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtX },
-            axisTick: { show: false },
-          },
-          yAxis: {
-            type: "value" as const,
-            splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
-          },
-          series: [
-            {
-              type: "line",
-              smooth: true,
-              symbol: "circle",
-              symbolSize: 6,
-              lineStyle: { width: 2, color: palette.colors[0] },
-              itemStyle: { color: palette.colors[0] },
-              areaStyle: {
-                color: {
-                  type: "linear",
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [
-                    { offset: 0, color: palette.fill(0.1) },
-                    { offset: 1, color: palette.fill(0.01) },
-                  ],
-                },
-              },
-              data: values,
-            },
-          ],
-        };
-
-      case "bar":
-        return {
-          ...base,
-          xAxis: {
-            type: "category" as const,
-            data: labels,
-            axisLine: { lineStyle: { color: "#e2e8f0" } },
-            axisLabel: { color: "#64748b", fontSize: 11, rotate: 45, formatter: fmtX },
-            axisTick: { show: false },
-          },
-          yAxis: {
-            type: "value" as const,
-            splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
-          },
-          series: [
-            {
-              type: "bar",
-              barWidth: "60%",
-              itemStyle: {
-                color: {
-                  type: "linear",
-                  x: 0,
-                  y: 0,
-                  x2: 0,
-                  y2: 1,
-                  colorStops: [
-                    { offset: 0, color: palette.colors[0] },
-                    { offset: 1, color: palette.colors[1] || palette.colors[0] },
-                  ],
-                },
-                borderRadius: [2, 2, 0, 0],
-              },
-              data: values,
-            },
-          ],
-        };
-
-      case "pie":
-        return {
-          backgroundColor: "transparent",
-          tooltip: {
-            trigger: "item" as const,
-            backgroundColor: "rgba(255,255,255,0.95)",
-            borderColor: "#e2e8f0",
-            borderWidth: 1,
-            textStyle: { color: "#1e293b", fontSize: 12 },
-            formatter: "{b}: {c} ({d}%)",
-          },
-          series: [
-            {
-              type: "pie",
-              radius: ["35%", "65%"],
-              center: ["50%", "50%"],
-              avoidLabelOverlap: true,
-              itemStyle: {
-                borderRadius: 4,
-                borderColor: "#fff",
-                borderWidth: 2,
-              },
-              color: palette.colors,
-              label: {
-                show: true,
-                formatter: "{b}\n{d}%",
-                fontSize: 11,
-                color: "#475569",
-              },
-              emphasis: {
-                label: { show: true, fontSize: 14, fontWeight: 700 },
-                itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.2)" },
-              },
-              data: labels.map((label, i) => ({
-                name: label,
-                value: typeof values[i] === "number" ? values[i] : 0,
-              })),
-            },
-          ],
-        };
-
-      case "scatter":
-        return {
-          ...base,
-          tooltip: {
-            trigger: "item" as const,
-            backgroundColor: "rgba(255,255,255,0.95)",
-            borderColor: "#e2e8f0",
-            borderWidth: 1,
-            textStyle: { color: "#1e293b", fontSize: 12 },
-            formatter: (p: any) => `${chart.x_field}: ${formatValue(p.value?.x, xFormat)}, ${chart.y_field}: ${formatValue(p.value?.y, yFormat)}`,
-          },
-          xAxis: {
-            type: "value" as const,
-            name: chart.x_field,
-            splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtX },
-          },
-          yAxis: {
-            type: "value" as const,
-            name: chart.y_field,
-            splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
-          },
-          series: [
-            {
-              type: "scatter",
-              symbolSize: 10,
-              itemStyle: {
-                color: {
-                  type: "radial",
-                  x: 0.5,
-                  y: 0.5,
-                  r: 0.5,
-                  colorStops: [
-                    { offset: 0, color: palette.fill(0.6) },
-                    { offset: 1, color: palette.fill(0.1) },
-                  ],
-                },
-              },
-              data: values,
-            },
-          ],
-        };
-
-      default:
-        return base;
-    }
-  };
+  const chartOption = useMemo(
+    () => getChartOption(chart, palette, fieldFormats),
+    [chart, palette, fieldFormats]
+  );
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -280,7 +67,7 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormats
         {hasData ? (
           <ReactECharts
             key={colorScheme || "slate"}
-            option={getChartOption()}
+            option={chartOption}
             style={{ height: chart.chart_type === "kpi" ? 60 : 320 }}
             notMerge
             lazyUpdate

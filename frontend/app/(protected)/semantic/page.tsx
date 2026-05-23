@@ -6,7 +6,7 @@ import { api } from "@/services/api";
 import type { SemanticField, DatasetProfile } from "@/types";
 
 const ROLE_OPTIONS: SemanticField["role"][] = ["dimension", "measure", "date"];
-const AGG_OPTIONS = ["SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"] as const;
+const AGG_OPTIONS = ["SUM", "AVG", "COUNT"] as const;
 
 const FORMAT_OPTIONS = [
   { value: "", label: "None" },

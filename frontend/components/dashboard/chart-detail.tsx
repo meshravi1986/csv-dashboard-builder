@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import dynamic from "next/dynamic";
 import type { ChartSpec } from "@/types";
 import { getPalette } from "@/lib/palettes";
+import { getChartOption } from "@/lib/chart-options";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -25,60 +26,7 @@ export function ChartDetail({ chart, colorScheme, onClose }: ChartDetailProps) {
     return () => window.removeEventListener("keydown", handler);
   }, [onClose]);
 
-  const labels = chart.data?.labels || [];
-  const values = chart.data?.values || [];
-  const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
-
-  const getChartOption = () => {
-    const baseColors = palette.colors;
-
-    if (chart.chart_type === "kpi") {
-      return {
-        series: [{ type: "gauge", startAngle: 90, endAngle: -270, pointer: { show: false }, axisLine: { lineStyle: { width: 10, color: [[1, baseColors[0]]] } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, detail: { fontSize: 36, fontWeight: "bold", color: baseColors[0], offsetCenter: [0, 0], formatter: () => `$${values[0]?.toLocaleString() || 0}` }, data: [{ value: values[0] || 0 }] }],
-      };
-    }
-
-    const isLine = chart.chart_type === "line";
-    const isBar = chart.chart_type === "bar";
-    const isScatter = chart.chart_type === "scatter";
-    const isPie = chart.chart_type === "pie";
-
-    if (isPie) {
-      return {
-        tooltip: { trigger: "item", formatter: "{b}: {c} ({d}%)" },
-        series: [{ type: "pie", radius: ["30%", "60%"], center: ["50%", "50%"], data: labels.map((label: string, i: number) => ({ name: label, value: values[i] || 0 })), itemStyle: { borderRadius: 4 }, label: { fontSize: 13 }, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0, 0, 0, 0.5)" } } }],
-      };
-    }
-
-    const option: any = {
-      tooltip: { trigger: "axis" },
-      grid: { left: 60, right: 30, top: 40, bottom: 50 },
-      xAxis: { type: "category", data: labels, axisLabel: { rotate: labels.length > 10 ? 45 : 0, fontSize: 12 } },
-      yAxis: { type: "value", name: chart.y_field },
-      series: [],
-    };
-
-    if (isScatter) {
-      option.xAxis = { type: "value", name: chart.x_field };
-      option.yAxis = { type: "value", name: chart.y_field };
-      option.series.push({
-        type: "scatter",
-        data: labels.map((x: any, i: number) => [Number(x), values[i] || 0]),
-        symbolSize: 8,
-        itemStyle: { color: baseColors[0] },
-      });
-    } else {
-      option.series.push({
-        type: isLine ? "line" : "bar",
-        data: values,
-        itemStyle: { color: baseColors[0] },
-        smooth: isLine,
-        showSymbol: isLine,
-      });
-    }
-
-    return option;
-  };
+  const hasData = chart.data?.labels?.length || chart.data?.values?.length;
 
   const formulaInfo =
     chart.formula ||
@@ -116,7 +64,7 @@ export function ChartDetail({ chart, colorScheme, onClose }: ChartDetailProps) {
           {hasData ? (
             <ReactECharts
               key={colorScheme || "slate"}
-              option={getChartOption()}
+              option={getChartOption(chart, palette, undefined, "large")}
               style={{ width: "100%", height: "100%" }}
               notMerge
               lazyUpdate

@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { api } from "@/services/api";
-import ProductTour from "@/components/onboarding/product-tour";
+import dynamic from "next/dynamic";
+
+const ProductTour = dynamic(() => import("@/components/onboarding/product-tour"), { ssr: false });
 
 const steps = [
   { number: 1, title: "Upload CSV", desc: "Import your data — CSV or spreadsheet files", icon: "M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" },

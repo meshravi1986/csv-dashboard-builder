@@ -1,7 +1,7 @@
+import re
 from typing import Any, Dict, List, Optional, Tuple
-import json
 import duckdb
-from app.utils.duckdb import get_duckdb
+from app.utils.duckdb import get_duckdb, safe_quote_ident
 from app.engine.scoring import score_chart_combination
 
 
@@ -13,8 +13,7 @@ DETERMINISTIC_CHART_RULES = {
 
 
 def determine_chart_type(x_role: str, y_role: str) -> str:
-    key = (x_role, y_role)
-    return DETERMINISTIC_CHART_RULES.get(key, "bar") if (x_role, y_role) in DETERMINISTIC_CHART_RULES else "bar"
+    return DETERMINISTIC_CHART_RULES.get((x_role, y_role), "bar")
 
 
 def _build_profile_map(profile: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
@@ -50,7 +49,7 @@ def generate_chart_specs(
                 "width": "full" if len(specs) == 0 else "half",
                 "title": f"{measure['field_name']} over {date_field['field_name']}",
                 "semantic_reasoning": f"{measure['field_name']} is a {agg}-aggregated measure, {date_field['field_name']} is a date dimension",
-                "chart_reasoning": f"Line chart selected for time-series data ({date_field['field_name']} → {measure['field_name']})",
+                "chart_reasoning": f"Line chart selected for time-series data ({date_field['field_name']} \u2192 {measure['field_name']})",
                 "aggregation_reasoning": f"{agg} used for {measure['field_name']} as specified in semantic model",
             }
             scoring = score_chart_combination(
@@ -90,7 +89,7 @@ def generate_chart_specs(
                 "width": "half" if len(specs) > 1 else "full",
                 "title": f"{measure['field_name']} by {dim['field_name']}",
                 "semantic_reasoning": f"{measure['field_name']} is a {agg}-aggregated measure grouped by {dim['field_name']}",
-                "chart_reasoning": f"Bar chart selected for categorical comparison ({dim['field_name']} → {measure['field_name']})",
+                "chart_reasoning": f"Bar chart selected for categorical comparison ({dim['field_name']} \u2192 {measure['field_name']})",
                 "aggregation_reasoning": f"{agg} used for {measure['field_name']}",
             }
             scoring = score_chart_combination(
@@ -202,7 +201,6 @@ def suppress_charts(
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
     profile_map = _build_profile_map(profile)
 
-    # Near-duplicate detection: group by insight key, keep highest-scored per group
     near_dup_groups: Dict[tuple, List[tuple]] = {}
     for idx, spec in enumerate(chart_specs):
         key = _insight_key(spec)
@@ -371,27 +369,38 @@ def generate_dashboard_title(
     return "Data Dashboard"
 
 
-def _build_filter_sql(filters: Optional[Dict[str, Any]] = None) -> str:
+def _build_filter_sql(filters: Optional[Dict[str, Any]] = None) -> tuple[str, list]:
     if not filters:
-        return ""
+        return "", []
     conditions = []
+    params: list = []
+    param_idx = 1
     for field_name, fdef in filters.items():
+        q_field = safe_quote_ident(field_name)
         if fdef.get("type") == "dimension" and fdef.get("values"):
             vals = fdef["values"]
-            quoted = [f"'{v.replace(chr(39), chr(39)*2)}'" for v in vals]
-            conditions.append(f"\"{field_name}\" IN ({','.join(quoted)})")
+            placeholders = ",".join([f"${param_idx + i}" for i in range(len(vals))])
+            conditions.append(f"{q_field} IN ({placeholders})")
+            params.extend(vals)
+            param_idx += len(vals)
         elif fdef.get("type") == "date":
             start = fdef.get("start")
             end = fdef.get("end")
             if start and end:
-                conditions.append(f"\"{field_name}\" BETWEEN '{start}' AND '{end}'")
+                conditions.append(f"{q_field} BETWEEN ${param_idx} AND ${param_idx + 1}")
+                params.extend([start, end])
+                param_idx += 2
             elif start:
-                conditions.append(f"\"{field_name}\" >= '{start}'")
+                conditions.append(f"{q_field} >= ${param_idx}")
+                params.append(start)
+                param_idx += 1
             elif end:
-                conditions.append(f"\"{field_name}\" <= '{end}'")
+                conditions.append(f"{q_field} <= ${param_idx}")
+                params.append(end)
+                param_idx += 1
     if not conditions:
-        return ""
-    return " AND " + " AND ".join(conditions)
+        return "", []
+    return " AND " + " AND ".join(conditions), params
 
 
 def query_chart_data(chart_spec: Dict[str, Any], parquet_path: str, filters: Optional[Dict[str, Any]] = None, conn: Optional[duckdb.DuckDBPyConnection] = None) -> Dict[str, Any]:
@@ -406,6 +415,14 @@ def query_chart_data_batch(chart_specs: List[Dict[str, Any]], parquet_path: str,
         return [_query_chart_data_with_conn(spec, parquet_path, filters, conn) for spec in chart_specs]
 
 
+_FORMULA_COL_RE = re.compile(r'"(?:[^"]|"")+"')
+
+
+def _extract_formula_columns(formula: str) -> List[str]:
+    """Extract column names from a formula expression for validation."""
+    return [m.strip('"') for m in _FORMULA_COL_RE.findall(formula)]
+
+
 def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, filters: Optional[Dict[str, Any]], conn: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
     x_field = chart_spec["x_field"]
     y_field = chart_spec["y_field"]
@@ -413,7 +430,8 @@ def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, f
     chart_type = chart_spec["chart_type"]
     formula = chart_spec.get("formula")
 
-    filter_sql = _build_filter_sql(filters)
+    filter_sql, filter_params = _build_filter_sql(filters)
+    params: list = [parquet_path]
 
     def agg_fn(expr: str) -> str:
         if aggregation == "COUNT_DISTINCT":
@@ -431,38 +449,49 @@ def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, f
             return agg_fn(formula)
         if not y_field:
             return "0"
-        return agg_fn(f"\"{y_field}\"")
+        return agg_fn(safe_quote_ident(y_field))
 
     def raw_expr():
         if formula:
             return formula
-        return f"\"{y_field}\""
+        if y_field:
+            return safe_quote_ident(y_field)
+        return "0"
+
+    quoted_x = safe_quote_ident(x_field) if x_field else ""
 
     try:
         if chart_type == "kpi":
-            sql = f"SELECT COALESCE({value_expr()}, 0) as value FROM '{parquet_path}'{' WHERE 1=1' + filter_sql if filter_sql else ''}"
-            result = conn.execute(sql).fetchone()
+            sql = f"SELECT COALESCE({value_expr()}, 0) as value FROM read_parquet($1)"
+            params.extend(filter_params)
+            if filter_sql:
+                sql += " WHERE 1=1" + filter_sql
+            result = conn.execute(sql, params).fetchone()
             val = float(result[0]) if result else 0
             return {"labels": [], "values": [val]}
 
         if chart_type == "pie":
-            sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL{filter_sql} GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 20"
-            result = conn.execute(sql).fetchall()
+            sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT 20"
+            params.extend(filter_params)
+            result = conn.execute(sql, params).fetchall()
             return {
                 "labels": [str(r[0]) for r in result],
                 "values": [float(r[1]) if r[1] is not None else 0 for r in result],
             }
 
         if chart_type == "scatter":
-            sql = f"SELECT \"{x_field}\" as x, {raw_expr()} as y FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL AND {raw_expr()} IS NOT NULL{filter_sql} LIMIT 1000"
-            result = conn.execute(sql).fetchall()
+            rex = raw_expr()
+            sql = f"SELECT {quoted_x} as x, {rex} as y FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL AND {rex} IS NOT NULL{filter_sql} LIMIT 1000"
+            params.extend(filter_params)
+            result = conn.execute(sql, params).fetchall()
             return {
                 "labels": [],
                 "values": [{"x": r[0], "y": r[1]} for r in result],
             }
 
-        sql = f"SELECT \"{x_field}\" as label, {value_expr()} as value FROM '{parquet_path}' WHERE \"{x_field}\" IS NOT NULL{filter_sql} GROUP BY \"{x_field}\" ORDER BY value DESC LIMIT 50"
-        result = conn.execute(sql).fetchall()
+        sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT 50"
+        params.extend(filter_params)
+        result = conn.execute(sql, params).fetchall()
         return {
             "labels": [str(r[0]) for r in result],
             "values": [float(r[1]) if r[1] is not None else 0 for r in result],

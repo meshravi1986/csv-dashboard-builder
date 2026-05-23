@@ -72,7 +72,8 @@ which users can accept or override.
 
 ### DuckDB for Queries
 All aggregations run via DuckDB in-memory inside the backend container.
-No external query engine needed.
+No external query engine needed. Uses a connection pool (4 pre-warmed connections)
+with LRU-cached profiling (50-entry cap) and cached versioning-column detection.
 
 ### Dashboard Version Creation
 - Copies semantics, metrics, and chart_specs from the source dashboard
@@ -96,8 +97,9 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 
 - **Next.js App Router**: Single-page app with server-side auth
 - **FastAPI**: Simple async Python API
-- **DuckDB**: Embedded analytical SQL engine
+- **DuckDB**: Embedded analytical SQL engine (connection pool with 4 pre-warmed conns)
 - **Polars**: CSV to Parquet conversion
+- **In-memory caching**: LRU profile cache (50-entry cap), cached versioning detection, parsed date cache
 - **ECharts**: Rich charting library
 - **@dnd-kit**: Drag-and-drop chart reordering
 - **Supabase**: Auth, storage, and database
@@ -105,12 +107,16 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 
 ## Security
 
+### SQL Injection Prevention
+All filter values use DuckDB positional parameters (`$1, $2, ...`) exclusively. Column names are validated and escaped via `safe_quote_ident()`. The raw SQL execution endpoint has been removed entirely. Dangerous DuckDB functions (`read_text`, `read_blob`, `read_file`, `glob`, `write_text`, etc.) are blocklisted.
+
 ### Database Access
 - `get_supabase()` uses `SUPABASE_LIMITED_KEY` (falls back to `SUPABASE_SERVICE_KEY`)
 - `get_supabase_admin()` uses `SUPABASE_SERVICE_KEY` — only for operations that need it:
   - Auth verification (`supabase.auth.get_user()`)
   - Storage uploads/downloads
 - `SUPABASE_LIMITED_KEY` should be a JWT with a restricted DB role (see `docs/schema.sql`)
+- Supabase error details are logged server-side; generic messages returned to client
 
 ### Upload Validation (server-side)
 - File extension check (.csv only)
@@ -124,6 +130,11 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 - Must include your production frontend URL (e.g., Vercel domain)
 - Default: `http://localhost:3000`
 
+### Auth
+- PIN-based login with client-side rate limiting (5 failed attempts → cooldown 30–300s)
+- Auth callback `next` parameter validated against allowed path whitelist (prevents open redirect)
+- `APP_SECRET` used for PIN hashing; `SUPABASE_SERVICE_KEY` for auth verification
+
 ## Data Flow
 
 1. CSV uploaded → processed by FastAPI → converted to Parquet via Polars
@@ -132,8 +143,8 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 4. User confirms semantics → stored in semantic_fields table
 5. Metrics defined → stored in metrics table
 6. Dashboard generation → chart_specs created → stored in dashboards + chart_specs
-7. Frontend renders charts via ECharts based on chart_specs
-8. Charts can be reordered via drag-and-drop; order persisted to backend
+7. Frontend renders charts via ECharts based on chart_specs (memoized via `useMemo` + `getChartOption()` shared utility)
+8. Charts can be reordered via drag-and-drop (memoized `SortableGroup` + `useCallback` handlers); order persisted to backend
 9. Filter changes save original unfiltered chart data in a ref (`unfilteredDataRef`) before applying; clearing restores from the ref — no server round-trip
 10. After add/delete chart, `loadDashboard` re-fetches the full dashboard from the API; if filters are active, it clears the stale `unfilteredDataRef` and increments `filterRefreshKey` to re-trigger the filter effect, re-applying filters to the updated dataset
 11. Dashboard fetch retries 3x with 800ms delay to handle Supabase propagation lag on version creation

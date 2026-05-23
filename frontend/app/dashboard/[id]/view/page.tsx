@@ -7,6 +7,7 @@ import { api } from "@/services/api";
 import dynamic from "next/dynamic";
 import html2canvas from "html2canvas";
 import { getPalette } from "@/lib/palettes";
+import { getChartOption } from "@/lib/chart-options";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -162,7 +163,6 @@ export default function DashboardViewPage() {
 }
 
 function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorScheme?: string }) {
-  const palette = getPalette(colorScheme);
   const kpiCharts = charts.filter((c) => c.chart_type === "kpi");
   const otherCharts = charts.filter((c) => c.chart_type !== "kpi");
 
@@ -179,71 +179,20 @@ function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorSc
       {kpiCharts.length > 0 && (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 print-chart">
           {kpiCharts.map((chart) => (
-            <ChartView key={chart.id} chart={chart} palette={palette.colors} />
+            <ChartView key={chart.id} chart={chart} colorScheme={colorScheme} />
           ))}
         </div>
       )}
       {otherCharts.map((chart) => (
-        <ChartView key={chart.id} chart={chart} palette={palette.colors} />
+        <ChartView key={chart.id} chart={chart} colorScheme={colorScheme} />
       ))}
     </div>
   );
 }
 
-function ChartView({ chart, palette }: { chart: ChartSpec; palette: string[] }) {
-  const labels = chart.data?.labels || [];
-  const values = chart.data?.values || [];
-  const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
-
-  const getOption = () => {
-    if (chart.chart_type === "kpi") {
-      const val = typeof values[0] === "number" ? values[0] : null;
-      return {
-        backgroundColor: "transparent",
-        grid: { show: false, left: 0, top: 0, right: 0, bottom: 0 },
-        xAxis: { show: false },
-        yAxis: { show: false },
-        graphic: {
-          type: "text",
-          left: "center",
-          top: "center",
-          style: {
-            text: val !== null ? val.toLocaleString() : "—",
-            fontSize: 36,
-            fontWeight: 600,
-            fill: val !== null ? palette[0] : "#94a3b8",
-          },
-        },
-      };
-    }
-
-    const isPie = chart.chart_type === "pie";
-    if (isPie) {
-      return {
-        tooltip: { trigger: "item" },
-        series: [{ type: "pie", radius: ["30%", "60%"], data: labels.map((l: string, i: number) => ({ name: l, value: values[i] || 0 })), itemStyle: { borderRadius: 4 }, label: { fontSize: 13 }, emphasis: { itemStyle: { shadowBlur: 10, shadowOffsetX: 0, shadowColor: "rgba(0,0,0,0.5)" } } }],
-      };
-    }
-
-    const isScatter = chart.chart_type === "scatter";
-    const base: any = {
-      tooltip: { trigger: "axis" },
-      grid: { left: 60, right: 30, top: 30, bottom: 40 },
-      series: [],
-    };
-
-    if (isScatter) {
-      base.xAxis = { type: "value", name: chart.x_field };
-      base.yAxis = { type: "value", name: chart.y_field };
-      base.series.push({ type: "scatter", data: labels.map((x: any, i: number) => [Number(x), values[i] || 0]), symbolSize: 8, itemStyle: { color: palette[0] } });
-    } else {
-      base.xAxis = { type: "category", data: labels, axisLabel: { rotate: labels.length > 10 ? 45 : 0 } };
-      base.yAxis = { type: "value", name: chart.y_field };
-      base.series.push({ type: chart.chart_type, data: values, itemStyle: { color: palette[0] }, smooth: chart.chart_type === "line", showSymbol: chart.chart_type === "line" });
-    }
-
-    return base;
-  };
+function ChartView({ chart, colorScheme }: { chart: ChartSpec; colorScheme?: string }) {
+  const palette = getPalette(colorScheme);
+  const hasData = (chart.data?.labels?.length || chart.data?.values?.length) ? true : false;
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden print-chart">
@@ -254,7 +203,7 @@ function ChartView({ chart, palette }: { chart: ChartSpec; palette: string[] }) 
         {hasData ? (
           <ReactECharts
             key={chart.id}
-            option={getOption()}
+            option={getChartOption(chart as any, palette)}
             style={{ height: chart.chart_type === "kpi" ? 120 : 350 }}
             notMerge
             lazyUpdate

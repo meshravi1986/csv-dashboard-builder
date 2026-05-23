@@ -99,10 +99,9 @@ def build_dashboard(
     parquet_path: str = "",
     metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
-    ai_titles = get_ai_chart_titles([])
     profile = profile_dataset(parquet_path, dataset_id=dataset_id) if parquet_path else None
 
-    chart_specs = generate_chart_specs(semantic_fields, ai_titles, profile=profile)
+    chart_specs = generate_chart_specs(semantic_fields, None, profile=profile)
 
     if metrics:
         for metric in metrics:
@@ -124,9 +123,13 @@ def build_dashboard(
             }
             chart_specs.append(kpi_spec)
 
-    ai_composition = get_ai_dashboard_composition(json.dumps(semantic_fields, indent=2))
-    title = ai_composition.get("title", "Data Dashboard")
-    description = ai_composition.get("description", "Executive overview")
+    try:
+        ai_composition = get_ai_dashboard_composition(json.dumps(semantic_fields, indent=2))
+        title = ai_composition.get("title", "Data Dashboard")
+        description = ai_composition.get("description", "Executive overview")
+    except Exception:
+        title = "Data Dashboard"
+        description = "Executive overview"
 
     dashboard_id = str(uuid.uuid4())
     default_tab_id = str(uuid.uuid4())

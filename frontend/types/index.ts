@@ -57,14 +57,16 @@ export interface Metric {
   updated_at: string;
 }
 
+import type { ChartType, AggType } from "@/lib/chart-types";
+
 export interface ChartSpec {
   id: string;
   dashboard_id: string;
-  chart_type: "line" | "bar" | "kpi" | "scatter" | "pie";
+  chart_type: ChartType;
   title: string;
   x_field: string;
   y_field: string;
-  aggregation: "SUM" | "AVG" | "COUNT" | "MIN" | "MAX" | "COUNT_DISTINCT";
+  aggregation: AggType;
   x_role: "dimension" | "date" | "measure";
   y_role: "measure";
   semantic_reasoning: string;
@@ -85,6 +87,14 @@ export interface ChartSpec {
   updated_at: string;
 }
 
+export interface Tab {
+  id: string;
+  dashboard_id: string;
+  title: string;
+  order: number;
+  created_at: string;
+}
+
 export interface Dashboard {
   id: string;
   user_id: string;
@@ -92,7 +102,7 @@ export interface Dashboard {
   title: string;
   description?: string;
   charts: ChartSpec[];
-  tabs?: { id: string; title: string; order: number }[];
+  tabs?: Tab[];
   field_formats?: Record<string, string>;
   color_scheme?: string;
   created_at: string;
@@ -111,18 +121,6 @@ export interface ProfilingState {
   loading: boolean;
   profile: DatasetProfile | null;
   error?: string;
-}
-
-export interface SemanticState {
-  fields: SemanticField[];
-  confirmed: boolean;
-  loading: boolean;
-}
-
-export interface ApiResponse<T> {
-  data?: T;
-  error?: string;
-  status: "success" | "error";
 }
 
 export interface AuthUser {
