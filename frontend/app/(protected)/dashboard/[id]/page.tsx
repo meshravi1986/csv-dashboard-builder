@@ -7,7 +7,9 @@ import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { AddChartPanel } from "@/components/dashboard/add-chart-panel";
 import { FilterBar } from "@/components/dashboard/filter-bar";
 import { TabBar } from "@/components/dashboard/tab-bar";
+import { ChartDetail } from "@/components/dashboard/chart-detail";
 import { paletteOptions } from "@/lib/palettes";
+import type { ChartSpec } from "@/types";
 
 export default function DashboardDetailPage() {
   const params = useParams();
@@ -20,6 +22,7 @@ export default function DashboardDetailPage() {
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
   const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [filterRefreshKey, setFilterRefreshKey] = useState(0);
+  const [expandedChart, setExpandedChart] = useState<ChartSpec | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -241,7 +244,8 @@ export default function DashboardDetailPage() {
     : dashboard.charts;
 
   return (
-    <div>
+    <>
+      <div>
       <div className="sticky top-0 z-10 bg-slate-50 -mx-4 lg:-mx-8 -mt-4 lg:-mt-8 px-4 lg:px-8 pt-4 lg:pt-8 space-y-4 pb-4">
         <div className="flex items-center gap-2 flex-wrap bg-slate-900/5 rounded-xl px-4 py-2.5 border border-slate-200/60">
           <div className="relative" ref={paletteRef}>
@@ -358,7 +362,16 @@ export default function DashboardDetailPage() {
         />
       </div>
 
-      <DashboardView dashboard={{ ...dashboard, charts: filteredCharts }} onRefresh={loadDashboard} />
+      <DashboardView dashboard={{ ...dashboard, charts: filteredCharts }} onRefresh={loadDashboard} onExpandChart={setExpandedChart} />
     </div>
+
+    {expandedChart && (
+      <ChartDetail
+        chart={expandedChart}
+        colorScheme={dashboard.color_scheme}
+        onClose={() => setExpandedChart(null)}
+      />
+    )}
+  </>
   );
 }

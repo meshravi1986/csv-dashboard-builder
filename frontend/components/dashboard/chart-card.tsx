@@ -10,10 +10,11 @@ const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 interface ChartCardProps {
   chart: ChartSpec;
   onDelete?: (chartId: string) => void;
+  onExpand?: (chart: ChartSpec) => void;
   colorScheme?: string;
 }
 
-export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
+export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardProps) {
   const [showInfo, setShowInfo] = useState(false);
   const palette = getPalette(colorScheme);
 
@@ -267,7 +268,7 @@ export function ChartCard({ chart, onDelete, colorScheme }: ChartCardProps) {
           )}
         </div>
       </div>
-      <div className="p-2">
+      <div className="p-2 cursor-pointer" onClick={() => onExpand?.(chart)}>
         {hasData ? (
           <ReactECharts
             key={colorScheme || "slate"}
