@@ -264,6 +264,84 @@ def suppress_charts(
     return kept_specs, kept_data
 
 
+def _interleave_types(charts: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    by_type: Dict[str, List[Dict[str, Any]]] = {}
+    for c in charts:
+        by_type.setdefault(c["chart_type"], []).append(c)
+    types = sorted(by_type, key=lambda t: len(by_type[t]), reverse=True)
+    result = []
+    while any(by_type.values()):
+        for t in types:
+            if by_type[t]:
+                result.append(by_type[t].pop(0))
+    return result
+
+
+def layout_dashboard(chart_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    for s in chart_specs:
+        ct = s.get("chart_type", "")
+        if ct == "kpi":
+            s["layout_group"] = "kpi"
+            s["layout_priority"] = 1
+            s["recommended_size"] = "quarter"
+            s["width"] = "quarter"
+        elif s.get("x_role") == "date" and s.get("y_role") == "measure":
+            s["layout_group"] = "trend"
+            s["layout_priority"] = 2
+        elif ct == "scatter":
+            s["layout_group"] = "scatter"
+            s["layout_priority"] = 4
+        else:
+            s["layout_group"] = "comparison"
+            s["layout_priority"] = 3
+
+    kpis = [s for s in chart_specs if s.get("chart_type") == "kpi"][:4]
+    non_kpis = [s for s in chart_specs if s.get("chart_type") != "kpi"]
+
+    non_kpis.sort(key=lambda s: (s["layout_priority"], -(s.get("chart_score", 50) or 50)))
+
+    interleaved: List[Dict[str, Any]] = []
+    for priority in range(2, 5):
+        group = [s for s in non_kpis if s["layout_priority"] == priority]
+        if group:
+            interleaved.extend(_interleave_types(group))
+
+    ordered: List[Dict[str, Any]] = []
+    i = 0
+    while i < len(interleaved):
+        remaining = len(interleaved) - i
+        current = interleaved[i]
+
+        if remaining == 1:
+            current["width"] = "full"
+            current["recommended_size"] = "full"
+            ordered.append(current)
+            i += 1
+            continue
+
+        nxt = interleaved[i + 1]
+
+        if current["chart_type"] == nxt["chart_type"] and remaining >= 3:
+            current["width"] = "full"
+            current["recommended_size"] = "full"
+            ordered.append(current)
+            i += 1
+        else:
+            current["width"] = "half"
+            nxt["width"] = "half"
+            current["recommended_size"] = "half"
+            nxt["recommended_size"] = "half"
+            ordered.append(current)
+            ordered.append(nxt)
+            i += 2
+
+    result = kpis + ordered
+    for idx, s in enumerate(result):
+        s["order"] = idx
+
+    return result
+
+
 def generate_dashboard_title(
     semantic_fields: List[Dict[str, Any]],
     ai_title: Optional[str] = None,

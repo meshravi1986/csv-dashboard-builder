@@ -83,8 +83,6 @@ export function DashboardView({ dashboard, onRefresh, onExpandChart }: Dashboard
 
   const otherCharts = charts.filter((c) => c.chart_type !== "kpi").sort((a, b) => a.order - b.order);
   const kpiCards = charts.filter((c) => c.chart_type === "kpi").sort((a, b) => a.order - b.order);
-  const fullWidthCharts = otherCharts.filter((c) => c.width === "full");
-  const halfWidthCharts = otherCharts.filter((c) => c.width === "half");
 
   const handleDeleteChart = useCallback(async (chartId: string) => {
     if (!dashboard.id) return;
@@ -158,8 +156,19 @@ export function DashboardView({ dashboard, onRefresh, onExpandChart }: Dashboard
   return (
     <div className="space-y-6">
       {renderSortableGroup(null, kpiCards, "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4")}
-      {renderSortableGroup("Full Width", fullWidthCharts, "space-y-4")}
-      {renderSortableGroup("Half Width", halfWidthCharts, "grid grid-cols-1 lg:grid-cols-2 gap-4")}
+      {otherCharts.length > 0 && (
+        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleGroupDragEnd(otherCharts)}>
+          <SortableContext items={otherCharts.map((c) => c.id)} strategy={verticalListSortingStrategy}>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+              {otherCharts.map((chart) => (
+                <div key={chart.id} className={chart.width === "full" ? "lg:col-span-2" : ""}>
+                  <SortableChartCard chart={chart} onDelete={handleDeleteChart} onExpand={onExpandChart} colorScheme={dashboard.color_scheme} fieldFormats={dashboard.field_formats} />
+                </div>
+              ))}
+            </div>
+          </SortableContext>
+        </DndContext>
+      )}
     </div>
   );
 }

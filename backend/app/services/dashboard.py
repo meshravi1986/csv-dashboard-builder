@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 from app.config import settings
 from app.prompts.chart import CHART_TITLE_PROMPT, DASHBOARD_COMPOSITION_PROMPT
-from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch, suppress_charts
+from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch, suppress_charts, layout_dashboard
 from app.engine.profiling import profile_dataset
 
 _has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
@@ -124,23 +124,6 @@ def build_dashboard(
             }
             chart_specs.append(kpi_spec)
 
-    kpi_specs = [s for s in chart_specs if s["chart_type"] == "kpi"]
-    chart_only_specs = [s for s in chart_specs if s["chart_type"] != "kpi"]
-
-    # User-defined metric KPI cards are appended after auto-generated ones
-    # Prioritize them: user-defined come first, then auto-generated fill remaining slots
-    num_user_metrics = len(metrics) if metrics else 0
-    if num_user_metrics > 0:
-        user_kpi = kpi_specs[-num_user_metrics:]
-        auto_kpi = kpi_specs[:-num_user_metrics]
-        kpi_specs = (user_kpi + auto_kpi)[:4]
-    else:
-        kpi_specs = kpi_specs[:4]
-
-    chart_specs = kpi_specs + chart_only_specs[:4]
-    for i, spec in enumerate(chart_specs):
-        spec["order"] = i
-
     ai_composition = get_ai_dashboard_composition(json.dumps(semantic_fields, indent=2))
     title = ai_composition.get("title", "Data Dashboard")
     description = ai_composition.get("description", "Executive overview")
@@ -155,8 +138,14 @@ def build_dashboard(
     chart_specs, all_chart_data = suppress_charts(chart_specs, all_chart_data, profile, row_count=profile.get("row_count", 0) if profile else 0)
 
     if not chart_specs:
-        chart_specs = [{"chart_type": "kpi", "x_field": "", "y_field": "", "aggregation": "COUNT", "x_role": "dimension", "y_role": "measure", "order": 0, "width": "half", "title": "No Data", "semantic_reasoning": "", "chart_reasoning": "", "aggregation_reasoning": "", "formula": None}]
+        chart_specs = [{"chart_type": "kpi", "x_field": "", "y_field": "", "aggregation": "COUNT", "x_role": "dimension", "y_role": "measure", "order": 0, "width": "full", "title": "No Data", "semantic_reasoning": "", "chart_reasoning": "", "aggregation_reasoning": "", "formula": None}]
         all_chart_data = [{"labels": [], "values": [0]}]
+
+    # Merge data into specs for layout reordering
+    for spec, data in zip(chart_specs, all_chart_data):
+        spec["_data"] = data
+    chart_specs = layout_dashboard(chart_specs)
+    all_chart_data = [s.pop("_data") for s in chart_specs]
 
     for i, spec in enumerate(chart_specs):
         chart_id = str(uuid.uuid4())
