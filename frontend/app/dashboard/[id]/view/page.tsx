@@ -6,6 +6,7 @@ import { supabase } from "@/lib/supabase";
 import { api } from "@/services/api";
 import dynamic from "next/dynamic";
 import html2canvas from "html2canvas";
+import jsPDF from "jspdf";
 import { getPalette } from "@/lib/palettes";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
@@ -89,7 +90,6 @@ export default function DashboardViewPage() {
         logging: false,
       });
       const imgData = canvas.toDataURL("image/png");
-      const { default: jsPDF } = await import("jspdf");
       const pdf = new jsPDF("l", "mm", "a4");
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
@@ -117,8 +117,6 @@ export default function DashboardViewPage() {
       </div>
     );
   }
-
-  const nonKpiCharts = dashboard.charts.filter((c) => c.chart_type !== "kpi");
 
   return (
     <div className="min-h-screen bg-slate-50">
@@ -162,7 +160,7 @@ export default function DashboardViewPage() {
             <p className="text-sm text-slate-500 mt-1">{dashboard.description}</p>
           )}
         </div>
-        <DashboardCharts charts={nonKpiCharts} colorScheme={dashboard.color_scheme} />
+        <DashboardCharts charts={dashboard.charts} colorScheme={dashboard.color_scheme} />
       </div>
     </div>
   );
@@ -170,6 +168,8 @@ export default function DashboardViewPage() {
 
 function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorScheme?: string }) {
   const palette = getPalette(colorScheme);
+  const kpiCharts = charts.filter((c) => c.chart_type === "kpi");
+  const otherCharts = charts.filter((c) => c.chart_type !== "kpi");
 
   if (charts.length === 0) {
     return (
@@ -181,7 +181,14 @@ function DashboardCharts({ charts, colorScheme }: { charts: ChartSpec[]; colorSc
 
   return (
     <div className="space-y-6">
-      {charts.map((chart) => (
+      {kpiCharts.length > 0 && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {kpiCharts.map((chart) => (
+            <ChartView key={chart.id} chart={chart} palette={palette.colors} />
+          ))}
+        </div>
+      )}
+      {otherCharts.map((chart) => (
         <ChartView key={chart.id} chart={chart} palette={palette.colors} />
       ))}
     </div>
@@ -195,8 +202,23 @@ function ChartView({ chart, palette }: { chart: ChartSpec; palette: string[] }) 
 
   const getOption = () => {
     if (chart.chart_type === "kpi") {
+      const val = typeof values[0] === "number" ? values[0] : null;
       return {
-        series: [{ type: "gauge", startAngle: 90, endAngle: -270, pointer: { show: false }, axisLine: { lineStyle: { width: 10, color: [[1, palette[0]]] } }, axisTick: { show: false }, splitLine: { show: false }, axisLabel: { show: false }, detail: { fontSize: 28, fontWeight: "bold", color: palette[0], offsetCenter: [0, 0], formatter: () => `${values[0]?.toLocaleString() || 0}` }, data: [{ value: values[0] || 0 }] }],
+        backgroundColor: "transparent",
+        grid: { show: false, left: 0, top: 0, right: 0, bottom: 0 },
+        xAxis: { show: false },
+        yAxis: { show: false },
+        graphic: {
+          type: "text",
+          left: "center",
+          top: "center",
+          style: {
+            text: val !== null ? val.toLocaleString() : "—",
+            fontSize: 36,
+            fontWeight: 600,
+            fill: val !== null ? palette[0] : "#94a3b8",
+          },
+        },
       };
     }
 
@@ -238,12 +260,12 @@ function ChartView({ chart, palette }: { chart: ChartSpec; palette: string[] }) 
           <ReactECharts
             key={chart.id}
             option={getOption()}
-            style={{ height: chart.chart_type === "kpi" ? 200 : 350 }}
+            style={{ height: chart.chart_type === "kpi" ? 120 : 350 }}
             notMerge
             lazyUpdate
           />
         ) : (
-          <div className="flex items-center justify-center" style={{ height: 200 }}>
+          <div className="flex items-center justify-center" style={{ height: chart.chart_type === "kpi" ? 120 : 200 }}>
             <p className="text-sm text-slate-400">No data</p>
           </div>
         )}
