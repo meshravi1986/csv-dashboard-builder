@@ -28,7 +28,8 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
         raise HTTPException(status_code=400, detail="Only CSV files are supported")
 
     temp_path = TEMP_DIR / f"{uuid.uuid4()}_{file.filename}"
-    parquet_temp = TEMP_DIR / f"{uuid.uuid4()}.parquet"
+    parquet_filename = f"{user_id}/{uuid.uuid4()}.parquet"
+    parquet_temp = TEMP_DIR / Path(parquet_filename).name
 
     try:
         content = await file.read()
@@ -59,7 +60,6 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
                 detail=f"CSV has {column_count} columns, exceeds the maximum of {MAX_COLUMNS}",
             )
 
-        parquet_filename = f"{user_id}/{uuid.uuid4()}.parquet"
         df.write_parquet(str(parquet_temp))
 
         storage = get_supabase_storage()
@@ -137,8 +137,6 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
     finally:
         if temp_path.exists():
             temp_path.unlink()
-        if parquet_temp.exists():
-            parquet_temp.unlink()
 
 
 def get_parquet_path(parquet_storage_path: str) -> str:
