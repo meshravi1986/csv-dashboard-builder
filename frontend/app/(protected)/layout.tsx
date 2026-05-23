@@ -64,7 +64,7 @@ export default function ProtectedLayout({
   };
 
   return (
-    <div className="min-h-screen bg-slate-50 flex">
+    <div className="h-screen bg-slate-50 flex overflow-hidden">
       <aside className={`fixed inset-y-0 left-0 z-30 bg-white border-r border-slate-200 transform transition-all ${sidebarOpen ? "translate-x-0" : "-translate-x-full"} lg:translate-x-0 ${collapsed ? "w-16" : "w-64"}`}>
         <div className="flex flex-col h-full">
           <div className={`flex items-center h-16 border-b border-slate-200 cursor-pointer ${collapsed ? "justify-center px-0" : "gap-2 px-6"}`} onClick={() => router.push("/dashboards")}>
@@ -146,7 +146,7 @@ export default function ProtectedLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-8 overflow-auto">
+        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
           {children}
         </main>
       </div>
