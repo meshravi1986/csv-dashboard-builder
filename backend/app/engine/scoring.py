@@ -70,8 +70,11 @@ def score_chart_combination(
         score += 10
         reasons.append(f"Low cardinality {int(x_card)} for dimension '{x_field}' (+10)")
 
-    y_std = y_profile.get("std") if y_profile else None
-    y_mean = y_profile.get("mean") if y_profile else None
+    try:
+        y_std = float(y_profile.get("std")) if y_profile and y_profile.get("std") is not None else None
+        y_mean = float(y_profile.get("mean")) if y_profile and y_profile.get("mean") is not None else None
+    except (TypeError, ValueError):
+        y_std = y_mean = None
     if y_std is not None and y_mean is not None and y_mean != 0:
         cv = abs(y_std / y_mean)
         if cv > 0.5:
@@ -90,7 +93,10 @@ def score_chart_combination(
         reasons.append("KPI single-metric card (+10)")
 
     if chart_type == "scatter":
-        x_std = x_profile.get("std") if x_profile else None
+        try:
+            x_std = float(x_profile.get("std")) if x_profile and x_profile.get("std") is not None else None
+        except (TypeError, ValueError):
+            x_std = None
         if y_std is not None and x_std is not None:
             score += 10
             reasons.append("Scatter with two varying measures (+10)")
