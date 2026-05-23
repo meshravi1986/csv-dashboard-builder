@@ -242,7 +242,7 @@ export default function DashboardDetailPage() {
 
   return (
     <div>
-      <div className="sticky top-0 z-10 bg-slate-50 space-y-4 pb-4">
+      <div className="sticky top-0 z-10 bg-slate-50 -mx-4 lg:-mx-8 -mt-4 lg:-mt-8 px-4 lg:px-8 pt-4 lg:pt-8 space-y-4 pb-4">
         <div className="flex items-center gap-2 flex-wrap bg-slate-900/5 rounded-xl px-4 py-2.5 border border-slate-200/60">
           <div className="relative" ref={paletteRef}>
             <button

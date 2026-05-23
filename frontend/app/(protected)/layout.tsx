@@ -146,8 +146,10 @@ export default function ProtectedLayout({
           </div>
         </header>
 
-        <main className="flex-1 p-4 lg:p-8 overflow-y-auto">
-          {children}
+        <main className="flex-1 overflow-y-auto">
+          <div className="min-h-full p-4 lg:p-8">
+            {children}
+          </div>
         </main>
       </div>
     </div>
