@@ -87,6 +87,9 @@ export interface Dashboard {
   title: string;
   description?: string;
   charts: ChartSpec[];
+  tabs?: { id: string; title: string; order: number }[];
+  field_formats?: Record<string, string>;
+  color_scheme?: string;
   created_at: string;
   updated_at: string;
 }

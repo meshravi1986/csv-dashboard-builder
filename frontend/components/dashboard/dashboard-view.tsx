@@ -29,12 +29,13 @@ interface DashboardViewProps {
     description?: string;
     color_scheme?: string;
     charts: ChartSpec[];
+    field_formats?: Record<string, string>;
   };
   onRefresh?: () => void;
   onExpandChart?: (chart: ChartSpec) => void;
 }
 
-function SortableChartCard({ chart, onDelete, onExpand, colorScheme }: { chart: ChartSpec; onDelete: (id: string) => void; onExpand?: (chart: ChartSpec) => void; colorScheme?: string }) {
+function SortableChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormats }: { chart: ChartSpec; onDelete: (id: string) => void; onExpand?: (chart: ChartSpec) => void; colorScheme?: string; fieldFormats?: Record<string, string> }) {
   const {
     attributes,
     listeners,
@@ -62,7 +63,7 @@ function SortableChartCard({ chart, onDelete, onExpand, colorScheme }: { chart: 
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8h16M4 16h16" />
           </svg>
         </div>
-        <ChartCard chart={chart} onDelete={onDelete} onExpand={onExpand} colorScheme={colorScheme} />
+        <ChartCard chart={chart} onDelete={onDelete} onExpand={onExpand} colorScheme={colorScheme} fieldFormats={fieldFormats} />
       </div>
     </div>
   );
@@ -138,7 +139,7 @@ export function DashboardView({ dashboard, onRefresh, onExpandChart }: Dashboard
           {title && <h3 className="text-sm font-medium text-slate-700 mb-3">{title}</h3>}
           <div className={className}>
             {groupCharts.map((chart) => (
-              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} onExpand={onExpandChart} colorScheme={dashboard.color_scheme} />
+              <SortableChartCard key={chart.id} chart={chart} onDelete={handleDeleteChart} onExpand={onExpandChart} colorScheme={dashboard.color_scheme} fieldFormats={dashboard.field_formats} />
             ))}
           </div>
         </SortableContext>

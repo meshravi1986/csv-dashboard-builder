@@ -454,8 +454,15 @@ def get_dashboard(
         chart["data"] = chart_data
         charts.append(chart)
 
+    semantic_result = supabase.table("semantic_fields").select("field_name,formatting").eq("dataset_id", dashboard["dataset_id"]).execute()
+    field_formats = {}
+    for sf in (semantic_result.data or []):
+        if sf.get("formatting"):
+            field_formats[sf["field_name"]] = sf["formatting"]
+
     dashboard["charts"] = charts
     dashboard["tabs"] = tabs_result.data or []
+    dashboard["field_formats"] = field_formats
     return dashboard
 
 

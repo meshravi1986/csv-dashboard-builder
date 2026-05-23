@@ -4,6 +4,7 @@ import { useState } from "react";
 import dynamic from "next/dynamic";
 import type { ChartSpec } from "@/types";
 import { getPalette } from "@/lib/palettes";
+import { formatValue } from "@/lib/formatters";
 
 const ReactECharts = dynamic(() => import("echarts-for-react"), { ssr: false });
 
@@ -12,20 +13,27 @@ interface ChartCardProps {
   onDelete?: (chartId: string) => void;
   onExpand?: (chart: ChartSpec) => void;
   colorScheme?: string;
+  fieldFormats?: Record<string, string>;
 }
 
-export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardProps) {
+export function ChartCard({ chart, onDelete, onExpand, colorScheme, fieldFormats }: ChartCardProps) {
   const [showInfo, setShowInfo] = useState(false);
   const palette = getPalette(colorScheme);
 
   const labels = chart.data?.labels || [];
   const values = chart.data?.values || [];
   const hasData = chart.chart_type === "kpi" ? values.length > 0 : labels.length > 0 && values.length > 0;
+  const xFormat = fieldFormats?.[chart.x_field];
+  const yFormat = fieldFormats?.[chart.y_field];
 
   const formulaTooltip =
     chart.formula
       ? `${chart.title}  ·  Formula: ${chart.formula}`
       : chart.title;
+
+  const fmtAxis = (fmt?: string) => (value: any) => formatValue(value, fmt);
+  const fmtY = fmtAxis(yFormat);
+  const fmtX = fmtAxis(xFormat);
 
   const getChartOption = () => {
 
@@ -61,7 +69,7 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardP
             left: "center",
             top: "center",
             style: {
-              text: val !== null ? val.toLocaleString() : "—",
+              text: val !== null ? formatValue(val, yFormat) : "—",
               fontSize: 36,
               fontWeight: 600,
               fill: val !== null ? palette.colors[0] : "#94a3b8",
@@ -77,13 +85,13 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardP
             type: "category" as const,
             data: labels,
             axisLine: { lineStyle: { color: "#e2e8f0" } },
-            axisLabel: { color: "#64748b", fontSize: 11 },
+            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtX },
             axisTick: { show: false },
           },
           yAxis: {
             type: "value" as const,
             splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11 },
+            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
           },
           series: [
             {
@@ -118,13 +126,13 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardP
             type: "category" as const,
             data: labels,
             axisLine: { lineStyle: { color: "#e2e8f0" } },
-            axisLabel: { color: "#64748b", fontSize: 11, rotate: 45 },
+            axisLabel: { color: "#64748b", fontSize: 11, rotate: 45, formatter: fmtX },
             axisTick: { show: false },
           },
           yAxis: {
             type: "value" as const,
             splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11 },
+            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
           },
           series: [
             {
@@ -199,19 +207,19 @@ export function ChartCard({ chart, onDelete, onExpand, colorScheme }: ChartCardP
             borderColor: "#e2e8f0",
             borderWidth: 1,
             textStyle: { color: "#1e293b", fontSize: 12 },
-            formatter: (p: any) => `${chart.x_field}: ${p.value?.x}, ${chart.y_field}: ${p.value?.y}`,
+            formatter: (p: any) => `${chart.x_field}: ${formatValue(p.value?.x, xFormat)}, ${chart.y_field}: ${formatValue(p.value?.y, yFormat)}`,
           },
           xAxis: {
             type: "value" as const,
             name: chart.x_field,
             splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11 },
+            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtX },
           },
           yAxis: {
             type: "value" as const,
             name: chart.y_field,
             splitLine: { lineStyle: { color: "#f1f5f9" } },
-            axisLabel: { color: "#64748b", fontSize: 11 },
+            axisLabel: { color: "#64748b", fontSize: 11, formatter: fmtY },
           },
           series: [
             {
