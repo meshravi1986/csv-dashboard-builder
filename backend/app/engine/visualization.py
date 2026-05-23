@@ -300,7 +300,7 @@ def layout_dashboard(chart_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
             s["layout_group"] = "kpi"
             s["layout_priority"] = 1
             s["recommended_size"] = "quarter"
-            s["width"] = "quarter"
+            s["width"] = "half"
         elif s.get("x_role") == "date" and s.get("y_role") == "measure":
             s["layout_group"] = "trend"
             s["layout_priority"] = 2

@@ -70,7 +70,7 @@ export interface ChartSpec {
   chart_reasoning: string;
   aggregation_reasoning: string;
   order: number;
-  width: "full" | "half" | "quarter";
+  width: "full" | "half";
   formula?: string;
   chart_score?: number;
   score_reasons?: string[];

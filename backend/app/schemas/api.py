@@ -119,7 +119,7 @@ class ChartSpec(BaseModel):
     chart_reasoning: str
     aggregation_reasoning: str
     order: int
-    width: Literal["full", "half", "quarter"]
+    width: Literal["full", "half"]
     chart_score: Optional[int] = None
     score_reasons: Optional[List[str]] = None
     suppression_reason: Optional[str] = None
