@@ -8,6 +8,24 @@ import type { SemanticField, DatasetProfile } from "@/types";
 const ROLE_OPTIONS: SemanticField["role"][] = ["dimension", "measure", "date"];
 const AGG_OPTIONS = ["SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"] as const;
 
+const FORMAT_OPTIONS = [
+  { value: "", label: "None" },
+  { value: "currency", label: "$1,234 — Currency" },
+  { value: "percent", label: "12.3% — Percent" },
+  { value: "number", label: "1,234 — Number" },
+  { value: "decimal_2", label: "1234.56 — Decimal (2 places)" },
+  { value: "month_year", label: "Jan 2024 — Month Year" },
+  { value: "quarter", label: "Q1 2024 — Quarter" },
+  { value: "year", label: "2024 — Year" },
+  { value: "month_short", label: "Jan — Month Short" },
+  { value: "day_month", label: "15 Jan — Day Month" },
+  { value: "date_short", label: "01/15/2024 — Date Short" },
+  { value: "date_full", label: "Monday, January 15, 2024 — Date Full" },
+  { value: "week", label: "W3 2024 — Week" },
+  { value: "time", label: "02:30 PM — Time" },
+  { value: "datetime", label: "Jan 15, 2024, 02:30 PM — Datetime" },
+] as const;
+
 export default function SemanticPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -182,15 +200,19 @@ export default function SemanticPage() {
                     )}
                   </td>
                   <td className="px-4 py-3">
-                    <input
-                      type="text"
+                    <select
                       value={field.formatting || ""}
                       onChange={(e) =>
                         updateField(index, { formatting: e.target.value })
                       }
-                      placeholder="e.g., $#,###"
-                      className="px-2 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/20 w-28"
-                    />
+                      className="px-2 py-1.5 rounded-lg border border-slate-200 text-sm bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/20 w-44"
+                    >
+                      {FORMAT_OPTIONS.map((opt) => (
+                        <option key={opt.value} value={opt.value}>
+                          {opt.label}
+                        </option>
+                      ))}
+                    </select>
                   </td>
                 </tr>
               ))}
