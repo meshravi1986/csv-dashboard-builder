@@ -144,6 +144,7 @@ def build_dashboard(
     description = ai_composition.get("description", "Executive overview")
 
     dashboard_id = str(uuid.uuid4())
+    default_tab_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
 
     charts = []
@@ -167,10 +168,19 @@ def build_dashboard(
             "aggregation_reasoning": spec["aggregation_reasoning"],
             "order": spec["order"],
             "width": spec["width"],
+            "tab_id": default_tab_id,
             "data": chart_data,
             "created_at": now,
             "updated_at": now,
         })
+
+    tabs = [{
+        "id": default_tab_id,
+        "dashboard_id": dashboard_id,
+        "title": title or "Dashboard",
+        "order": 0,
+        "created_at": now,
+    }]
 
     return {
         "id": dashboard_id,
@@ -179,6 +189,7 @@ def build_dashboard(
         "title": title,
         "description": description,
         "charts": charts,
+        "tabs": tabs,
         "created_at": now,
         "updated_at": now,
     }

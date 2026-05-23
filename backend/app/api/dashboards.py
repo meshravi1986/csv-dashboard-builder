@@ -8,6 +8,7 @@ from app.schemas.api import (
     DashboardResponse, DashboardListResponse, DashboardUpdate, ChartCreateRequest,
     FilterSuggestResponse, DimensionFilterConfig, DateFilterConfig, DatePreset,
     ChartDataRequest, VersionCreateRequest, ColumnMatchResult, VersionInfo,
+    TabCreate, TabUpdate, TabResponse,
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
@@ -134,6 +135,20 @@ def generate_dashboard(
         dash_payload["version_number"] = 1
     _post_json(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert")
 
+    # Insert default tab
+    tab_payloads = []
+    for tab in dashboard.get("tabs", []):
+        tab_payload = {
+            "id": tab["id"],
+            "dashboard_id": db_dashboard_id,
+            "title": tab["title"],
+            "order": tab["order"],
+            "created_at": now,
+        }
+        tab_payloads.append(tab_payload)
+    if tab_payloads:
+        _post_json(f"{SUPABASE_REST_URL}/dashboard_tabs", tab_payloads, "Tab batch insert")
+
     # Batch insert all charts in a single POST
     chart_payloads = []
     for chart in dashboard["charts"]:
@@ -156,6 +171,7 @@ def generate_dashboard(
             "order": chart["order"],
             "width": chart["width"],
             "formula": chart.get("formula"),
+            "tab_id": chart.get("tab_id"),
             "created_at": now,
             "updated_at": now,
         })
@@ -427,6 +443,8 @@ def get_dashboard(
     dashboard = result.data[0]
     charts_result = supabase.table("chart_specs").select("*").eq("dashboard_id", dashboard_id).order("order").execute()
 
+    tabs_result = supabase.table("dashboard_tabs").select("*").eq("dashboard_id", dashboard_id).order("order").execute()
+
     dataset = supabase.table("datasets").select("parquet_path").eq("id", dashboard["dataset_id"]).execute()
     parquet_path = get_parquet_path(dataset.data[0]["parquet_path"]) if dataset.data else ""
 
@@ -437,6 +455,7 @@ def get_dashboard(
         charts.append(chart)
 
     dashboard["charts"] = charts
+    dashboard["tabs"] = tabs_result.data or []
     return dashboard
 
 
@@ -726,6 +745,7 @@ def add_chart(
         "aggregation_reasoning": spec["aggregation_reasoning"],
         "order": next_order,
         "width": width,
+        "tab_id": chart.tab_id,
         "created_at": now,
         "updated_at": now,
     }
@@ -833,4 +853,77 @@ def reorder_charts(
     for idx, chart_id in enumerate(request.chart_ids):
         supabase.table("chart_specs").update({"order": idx, "updated_at": now}).eq("id", chart_id).eq("dashboard_id", dashboard_id).execute()
 
+    return {"status": "success"}
+
+
+@router.post("/dashboards/{dashboard_id}/tabs", response_model=TabResponse)
+def create_tab(
+    dashboard_id: str,
+    body: TabCreate,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    existing = supabase.table("dashboard_tabs").select("order").eq("dashboard_id", dashboard_id).order("order", desc=True).limit(1).execute()
+    next_order = (existing.data[0]["order"] + 1) if existing.data else 0
+
+    tab_id = str(uuid.uuid4())
+    now = datetime.utcnow().isoformat()
+    payload = {
+        "id": tab_id,
+        "dashboard_id": dashboard_id,
+        "title": body.title,
+        "order": next_order,
+        "created_at": now,
+    }
+    headers = _rest_headers()
+    with httpx.Client(timeout=15.0) as client:
+        resp = client.post(f"{SUPABASE_REST_URL}/dashboard_tabs", headers=headers, json=payload)
+        if resp.status_code >= 400:
+            raise HTTPException(status_code=500, detail=f"Tab insert failed: {resp.text}")
+    return payload
+
+
+@router.put("/dashboards/tabs/{tab_id}", response_model=TabResponse)
+def rename_tab(
+    tab_id: str,
+    body: TabUpdate,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    tab_result = supabase.table("dashboard_tabs").select("*").eq("id", tab_id).execute()
+    if not tab_result.data:
+        raise HTTPException(status_code=404, detail="Tab not found")
+
+    dash_id = tab_result.data[0]["dashboard_id"]
+    dash_result = supabase.table("dashboards").select("id").eq("id", dash_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    now = datetime.utcnow().isoformat()
+    supabase.table("dashboard_tabs").update({"title": body.title}).eq("id", tab_id).execute()
+    tab_result.data[0]["title"] = body.title
+    return tab_result.data[0]
+
+
+@router.delete("/dashboards/tabs/{tab_id}")
+def delete_tab(
+    tab_id: str,
+    user: dict = Depends(get_current_user),
+):
+    supabase = get_supabase()
+    tab_result = supabase.table("dashboard_tabs").select("*").eq("id", tab_id).execute()
+    if not tab_result.data:
+        raise HTTPException(status_code=404, detail="Tab not found")
+
+    dash_id = tab_result.data[0]["dashboard_id"]
+    dash_result = supabase.table("dashboards").select("id").eq("id", dash_id).eq("user_id", user["id"]).execute()
+    if not dash_result.data:
+        raise HTTPException(status_code=404, detail="Dashboard not found")
+
+    supabase.table("chart_specs").delete().eq("tab_id", tab_id).execute()
+    supabase.table("dashboard_tabs").delete().eq("id", tab_id).execute()
     return {"status": "success"}

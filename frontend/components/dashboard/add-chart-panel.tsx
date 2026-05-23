@@ -5,11 +5,12 @@ import { api } from "@/services/api";
 
 interface AddChartPanelProps {
   dashboardId: string;
+  activeTabId?: string | null;
   onClose: () => void;
   onAdded: () => void;
 }
 
-export function AddChartPanel({ dashboardId, onClose, onAdded }: AddChartPanelProps) {
+export function AddChartPanel({ dashboardId, activeTabId, onClose, onAdded }: AddChartPanelProps) {
   const [mode, setMode] = useState<"chart" | "kpi">("chart");
   const [fields, setFields] = useState<any[]>([]);
   const [metrics, setMetrics] = useState<any[]>([]);
@@ -47,11 +48,13 @@ export function AddChartPanel({ dashboardId, onClose, onAdded }: AddChartPanelPr
   const handleSubmit = async () => {
     setSubmitting(true);
     try {
+      const base = { tab_id: activeTabId || undefined };
       if (mode === "kpi") {
         if (metricId) {
           const metric = metrics.find((m) => m.id === metricId);
           if (!metric) return;
           await api.addChart(dashboardId, {
+            ...base,
             chart_type: "kpi",
             x_field: "",
             y_field: metric.field_name,
@@ -60,6 +63,7 @@ export function AddChartPanel({ dashboardId, onClose, onAdded }: AddChartPanelPr
           });
         } else {
           await api.addChart(dashboardId, {
+            ...base,
             chart_type: "kpi",
             x_field: "",
             y_field: yField,
@@ -69,6 +73,7 @@ export function AddChartPanel({ dashboardId, onClose, onAdded }: AddChartPanelPr
         }
       } else {
         await api.addChart(dashboardId, {
+          ...base,
           chart_type: chartType,
           x_field: xField,
           y_field: yField,

@@ -73,6 +73,22 @@ class MetricResponse(BaseModel):
     updated_at: str
 
 
+class TabResponse(BaseModel):
+    id: str
+    dashboard_id: str
+    title: str
+    order: int
+    created_at: str
+
+
+class TabCreate(BaseModel):
+    title: str = "New Tab"
+
+
+class TabUpdate(BaseModel):
+    title: str
+
+
 class ChartCreateRequest(BaseModel):
     chart_type: Literal["line", "bar", "kpi", "scatter", "pie"]
     x_field: str = ""
@@ -80,6 +96,7 @@ class ChartCreateRequest(BaseModel):
     aggregation: AGGREGATION_TYPES = "SUM"
     title: Optional[str] = None
     formula: Optional[str] = None
+    tab_id: Optional[str] = None
 
 
 class ChartData(BaseModel):
@@ -103,6 +120,7 @@ class ChartSpec(BaseModel):
     order: int
     width: Literal["full", "half"]
     data: Optional[ChartData] = None
+    tab_id: Optional[str] = None
     created_at: str
     updated_at: str
 
@@ -114,6 +132,7 @@ class DashboardResponse(BaseModel):
     title: str
     description: Optional[str] = None
     charts: List[ChartSpec]
+    tabs: List[TabResponse] = []
     created_at: str
     updated_at: str
 

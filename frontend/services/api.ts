@@ -355,6 +355,38 @@ class ApiService {
     if (!res.ok) throw new Error("Versions fetch failed");
     return res.json();
   }
+
+  async createTab(dashboardId: string, title: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/${dashboardId}/tabs`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) throw new Error("Tab creation failed");
+    return res.json();
+  }
+
+  async renameTab(tabId: string, title: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/tabs/${tabId}`, {
+      method: "PUT",
+      headers,
+      body: JSON.stringify({ title }),
+    });
+    if (!res.ok) throw new Error("Tab rename failed");
+    return res.json();
+  }
+
+  async deleteTab(tabId: string) {
+    const headers = await this.getAuthHeaders();
+    const res = await this.apiFetch(`${this.baseUrl}/dashboards/tabs/${tabId}`, {
+      method: "DELETE",
+      headers,
+    });
+    if (!res.ok) throw new Error("Tab delete failed");
+    return res.json();
+  }
 }
 
 export const api = new ApiService();

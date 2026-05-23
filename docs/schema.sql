@@ -87,6 +87,17 @@ ALTER TABLE dashboards ADD COLUMN IF NOT EXISTS refresh_frequency TEXT NOT NULL 
 -- Dataset columns JSONB for fast column matching (run after existing schema)
 ALTER TABLE datasets ADD COLUMN IF NOT EXISTS columns JSONB;
 
+-- Dashboard tabs for multi-tab reports
+CREATE TABLE IF NOT EXISTS dashboard_tabs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    dashboard_id UUID NOT NULL REFERENCES dashboards(id) ON DELETE CASCADE,
+    title TEXT NOT NULL DEFAULT 'Tab 1',
+    "order" INTEGER NOT NULL DEFAULT 0,
+    created_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
+);
+
+ALTER TABLE chart_specs ADD COLUMN IF NOT EXISTS tab_id UUID REFERENCES dashboard_tabs(id) ON DELETE SET NULL;
+
 -- Create indexes
 CREATE INDEX IF NOT EXISTS idx_datasets_user_id ON datasets(user_id);
 CREATE INDEX IF NOT EXISTS idx_semantic_fields_dataset_id ON semantic_fields(dataset_id);

@@ -6,6 +6,7 @@ import { api } from "@/services/api";
 import { DashboardView } from "@/components/dashboard/dashboard-view";
 import { AddChartPanel } from "@/components/dashboard/add-chart-panel";
 import { FilterBar } from "@/components/dashboard/filter-bar";
+import { TabBar } from "@/components/dashboard/tab-bar";
 import { paletteOptions } from "@/lib/palettes";
 
 export default function DashboardDetailPage() {
@@ -18,6 +19,7 @@ export default function DashboardDetailPage() {
   const [suggestedFilters, setSuggestedFilters] = useState<any[]>([]);
   const [activeFilters, setActiveFilters] = useState<any[]>([]);
   const [filterRefreshKey, setFilterRefreshKey] = useState(0);
+  const [activeTabId, setActiveTabId] = useState<string | null>(null);
   const [editingTitle, setEditingTitle] = useState(false);
   const [editingDescription, setEditingDescription] = useState(false);
   const [titleDraft, setTitleDraft] = useState("");
@@ -222,15 +224,26 @@ export default function DashboardDetailPage() {
     );
   }
 
+  const tabs = dashboard.tabs || [];
   const currentPalette = paletteOptions.find((p) => p.value === (dashboard.color_scheme || "slate")) || paletteOptions[0];
+
+  useEffect(() => {
+    if (tabs.length > 0 && !activeTabId) {
+      setActiveTabId(tabs[0].id);
+    }
+  }, [tabs, activeTabId]);
+
+  const filteredCharts = activeTabId
+    ? dashboard.charts.filter((c: any) => c.tab_id === activeTabId)
+    : dashboard.charts;
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-2 flex-wrap bg-white rounded-xl border border-slate-200 px-4 py-2.5">
+      <div className="flex items-center gap-2 flex-wrap bg-slate-900/5 rounded-xl px-4 py-2.5 border border-slate-200/60">
         <div className="relative" ref={paletteRef}>
           <button
             onClick={() => setShowPalettePicker(!showPalettePicker)}
-            className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
+            className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-2"
             title="Change color scheme"
           >
             <span className="flex gap-0.5">
@@ -261,22 +274,19 @@ export default function DashboardDetailPage() {
             </div>
           )}
         </div>
-        <div className="w-px h-5 bg-slate-200" />
-        <button onClick={() => setShowAddPanel(!showAddPanel)} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+        <div className="w-px h-5 bg-slate-300/40" />
+        <button onClick={() => setShowAddPanel(!showAddPanel)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
           + Add Charts
         </button>
-        <div className="w-px h-5 bg-slate-200" />
-        <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+        <div className="w-px h-5 bg-slate-300/40" />
+        <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
           Edit Semantics
         </button>
-        <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+        <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
           Edit Metrics
         </button>
-        <div className="w-px h-5 bg-slate-200" />
-        <button onClick={() => router.push("/dashboards")} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
-          All Dashboards
-        </button>
-        <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 border border-red-200 text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors ml-auto">
+        <div className="flex-1" />
+        <button onClick={handleDelete} disabled={deleting} className="px-3 py-1.5 border border-red-200 bg-white text-red-600 text-sm font-medium rounded-lg hover:bg-red-50 transition-colors">
           {deleting ? "Deleting..." : "Delete"}
         </button>
       </div>
@@ -330,11 +340,19 @@ export default function DashboardDetailPage() {
       {showAddPanel && (
         <AddChartPanel
           dashboardId={params.id as string}
+          activeTabId={activeTabId}
           onClose={() => setShowAddPanel(false)}
           onAdded={() => { setShowAddPanel(false); loadDashboard(); }}
         />
       )}
-      <DashboardView dashboard={dashboard} onRefresh={loadDashboard} />
+      <TabBar
+        dashboardId={params.id as string}
+        tabs={tabs}
+        activeTabId={activeTabId}
+        onTabChange={setActiveTabId}
+        onRefresh={loadDashboard}
+      />
+      <DashboardView dashboard={{ ...dashboard, charts: filteredCharts }} onRefresh={loadDashboard} />
     </div>
   );
 }
