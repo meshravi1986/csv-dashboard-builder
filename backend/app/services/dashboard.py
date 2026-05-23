@@ -6,6 +6,7 @@ from openai import OpenAI
 from app.config import settings
 from app.prompts.chart import CHART_TITLE_PROMPT, DASHBOARD_COMPOSITION_PROMPT
 from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch
+from app.engine.profiling import profile_dataset
 
 _has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
 client = OpenAI(api_key=settings.openai_api_key, timeout=10.0) if _has_valid_key else None
@@ -99,8 +100,9 @@ def build_dashboard(
     metrics: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     ai_titles = get_ai_chart_titles([])
+    profile = profile_dataset(parquet_path, dataset_id=dataset_id) if parquet_path else None
 
-    chart_specs = generate_chart_specs(semantic_fields, ai_titles)
+    chart_specs = generate_chart_specs(semantic_fields, ai_titles, profile=profile)
 
     if metrics:
         for metric in metrics:

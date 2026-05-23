@@ -72,6 +72,8 @@ export interface ChartSpec {
   order: number;
   width: "full" | "half";
   formula?: string;
+  chart_score?: number;
+  score_reasons?: string[];
   data?: {
     labels: string[];
     values: (number | { x: number; y: number })[];

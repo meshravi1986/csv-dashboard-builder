@@ -37,9 +37,9 @@ def get_profile_stats(parquet_path: str) -> Dict[str, Any]:
             f"SELECT COUNT(*) FROM '{parquet_path}'"
         ).fetchone()[0]
 
-        # Single-pass SUMMARIZE for all columns: min, max, approx_unique, avg, count, null_percentage
+        # Single-pass SUMMARIZE for all columns: min, max, approx_unique, avg, std, count, null_percentage
         summary_rows = conn.execute(
-            f"SELECT column_name, column_type, min, max, approx_unique, avg, count, null_percentage FROM (SUMMARIZE SELECT * FROM '{parquet_path}')"
+            f"SELECT column_name, column_type, min, max, approx_unique, avg, std, count, null_percentage FROM (SUMMARIZE SELECT * FROM '{parquet_path}')"
         ).fetchall()
         summary_map = {}
         for sr in summary_rows:
@@ -49,8 +49,9 @@ def get_profile_stats(parquet_path: str) -> Dict[str, Any]:
                 "max": sr[3],
                 "approx_unique": sr[4],
                 "avg": sr[5],
-                "non_null_count": sr[6],
-                "null_percentage": sr[7],
+                "std": sr[6],
+                "non_null_count": sr[7],
+                "null_percentage": sr[8],
             }
 
         fields = []
@@ -78,6 +79,7 @@ def get_profile_stats(parquet_path: str) -> Dict[str, Any]:
                 field_info["min"] = s.get("min")
                 field_info["max"] = s.get("max")
                 field_info["mean"] = s.get("avg")
+                field_info["std"] = s.get("std")
 
             fields.append(field_info)
 

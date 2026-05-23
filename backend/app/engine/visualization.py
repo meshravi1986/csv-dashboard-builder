@@ -2,6 +2,7 @@ from typing import Any, Dict, List, Optional
 import json
 import duckdb
 from app.utils.duckdb import get_duckdb
+from app.engine.scoring import score_chart_combination
 
 
 DETERMINISTIC_CHART_RULES = {
@@ -13,19 +14,27 @@ DETERMINISTIC_CHART_RULES = {
 
 def determine_chart_type(x_role: str, y_role: str) -> str:
     key = (x_role, y_role)
-    return     DETERMINISTIC_CHART_RULES.get(key, "bar") if (x_role, y_role) in DETERMINISTIC_CHART_RULES else "bar"
+    return DETERMINISTIC_CHART_RULES.get(key, "bar") if (x_role, y_role) in DETERMINISTIC_CHART_RULES else "bar"
+
+
+def _build_profile_map(profile: Optional[Dict[str, Any]]) -> Dict[str, Dict[str, Any]]:
+    if not profile:
+        return {}
+    return {f["field_name"]: f for f in profile.get("fields", [])}
 
 
 def generate_chart_specs(
     semantic_fields: List[Dict[str, Any]],
     ai_suggestions: Optional[List[Dict[str, Any]]] = None,
+    profile: Optional[Dict[str, Any]] = None,
 ) -> List[Dict[str, Any]]:
     dimensions = [f for f in semantic_fields if f.get("role") == "dimension"]
     measures = [f for f in semantic_fields if f.get("role") == "measure"]
     date_fields = [f for f in semantic_fields if f.get("role") == "date"]
+    profile_map = _build_profile_map(profile)
+    row_count = (profile or {}).get("row_count", 0)
 
     specs = []
-    order = 0
 
     for date_field in date_fields:
         for measure in measures:
@@ -38,13 +47,22 @@ def generate_chart_specs(
                 "aggregation": agg,
                 "x_role": "date",
                 "y_role": "measure",
-                "order": order,
-                "width": "full" if order == 0 else "half",
+                "width": "full" if len(specs) == 0 else "half",
                 "title": f"{measure['field_name']} over {date_field['field_name']}",
                 "semantic_reasoning": f"{measure['field_name']} is a {agg}-aggregated measure, {date_field['field_name']} is a date dimension",
                 "chart_reasoning": f"Line chart selected for time-series data ({date_field['field_name']} → {measure['field_name']})",
                 "aggregation_reasoning": f"{agg} used for {measure['field_name']} as specified in semantic model",
             }
+            scoring = score_chart_combination(
+                x_field=date_field["field_name"],
+                y_field=measure["field_name"],
+                chart_type=chart_type,
+                x_profile=profile_map.get(date_field["field_name"]),
+                y_profile=profile_map.get(measure["field_name"]),
+                row_count=row_count,
+            )
+            spec["chart_score"] = scoring["chart_score"]
+            spec["score_reasons"] = scoring["score_reasons"]
             if ai_suggestions:
                 ai_match = next(
                     (s for s in ai_suggestions if s.get("x_field") == date_field["field_name"] and s.get("y_field") == measure["field_name"]),
@@ -55,8 +73,8 @@ def generate_chart_specs(
                         spec["title"] = ai_match["title"]
                     if ai_match.get("chart_reasoning"):
                         spec["chart_reasoning"] = ai_match["chart_reasoning"]
-            specs.append(spec)
-            order += 1
+            if scoring["should_render"]:
+                specs.append(spec)
 
     for dim in dimensions:
         for measure in measures:
@@ -69,13 +87,22 @@ def generate_chart_specs(
                 "aggregation": agg,
                 "x_role": "dimension",
                 "y_role": "measure",
-                "order": order,
-                "width": "half" if order > 1 else "full",
+                "width": "half" if len(specs) > 1 else "full",
                 "title": f"{measure['field_name']} by {dim['field_name']}",
                 "semantic_reasoning": f"{measure['field_name']} is a {agg}-aggregated measure grouped by {dim['field_name']}",
                 "chart_reasoning": f"Bar chart selected for categorical comparison ({dim['field_name']} → {measure['field_name']})",
                 "aggregation_reasoning": f"{agg} used for {measure['field_name']}",
             }
+            scoring = score_chart_combination(
+                x_field=dim["field_name"],
+                y_field=measure["field_name"],
+                chart_type=chart_type,
+                x_profile=profile_map.get(dim["field_name"]),
+                y_profile=profile_map.get(measure["field_name"]),
+                row_count=row_count,
+            )
+            spec["chart_score"] = scoring["chart_score"]
+            spec["score_reasons"] = scoring["score_reasons"]
             if ai_suggestions:
                 ai_match = next(
                     (s for s in ai_suggestions if s.get("x_field") == dim["field_name"] and s.get("y_field") == measure["field_name"]),
@@ -86,8 +113,8 @@ def generate_chart_specs(
                         spec["title"] = ai_match["title"]
                     if ai_match.get("chart_reasoning"):
                         spec["chart_reasoning"] = ai_match["chart_reasoning"]
-            specs.append(spec)
-            order += 1
+            if scoring["should_render"]:
+                specs.append(spec)
 
     for measure in measures:
         agg = measure.get("aggregation") or "SUM"
@@ -98,35 +125,54 @@ def generate_chart_specs(
             "aggregation": agg,
             "x_role": "dimension",
             "y_role": "measure",
-            "order": order,
             "width": "half",
             "title": f"Total {measure['field_name']}",
             "semantic_reasoning": f"Single metric KPI for {measure['field_name']}",
             "chart_reasoning": "KPI card selected for single metric display",
             "aggregation_reasoning": f"{agg} applied to {measure['field_name']}",
         }
-        specs.append(spec)
-        order += 1
+        scoring = score_chart_combination(
+            x_field=None,
+            y_field=measure["field_name"],
+            chart_type="kpi",
+            x_profile=None,
+            y_profile=profile_map.get(measure["field_name"]),
+            row_count=row_count,
+        )
+        spec["chart_score"] = scoring["chart_score"]
+        spec["score_reasons"] = scoring["score_reasons"]
+        if scoring["should_render"]:
+            specs.append(spec)
 
     if len(measures) >= 2:
         for i, m1 in enumerate(measures):
             for m2 in measures[i + 1:]:
+                chart_type = "scatter"
                 spec = {
-                    "chart_type": "scatter",
+                    "chart_type": chart_type,
                     "x_field": m1["field_name"],
                     "y_field": m2["field_name"],
                     "aggregation": m1.get("aggregation") or "SUM",
                     "x_role": "measure",
                     "y_role": "measure",
-                    "order": order,
                     "width": "half",
                     "title": f"{m1['field_name']} vs {m2['field_name']}",
                     "semantic_reasoning": f"Comparing two measures: {m1['field_name']} and {m2['field_name']}",
                     "chart_reasoning": "Scatter chart selected for two-measure correlation analysis",
                     "aggregation_reasoning": f"Raw values plotted for {m1['field_name']} and {m2['field_name']}",
                 }
-                specs.append(spec)
-                order += 1
+                scoring = score_chart_combination(
+                    x_field=m1["field_name"],
+                    y_field=m2["field_name"],
+                    chart_type=chart_type,
+                    x_profile=profile_map.get(m1["field_name"]),
+                    y_profile=profile_map.get(m2["field_name"]),
+                    row_count=row_count,
+                )
+                spec["chart_score"] = scoring["chart_score"]
+                spec["score_reasons"] = scoring["score_reasons"]
+                if scoring["should_render"]:
+                    specs.append(spec)
 
     for i, spec in enumerate(specs):
         spec["order"] = i

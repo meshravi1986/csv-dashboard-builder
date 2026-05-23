@@ -25,6 +25,7 @@ class FieldProfile(BaseModel):
     min: Optional[Any] = None
     max: Optional[Any] = None
     mean: Optional[float] = None
+    std: Optional[float] = None
 
 
 class DatasetProfileResponse(BaseModel):
@@ -119,6 +120,8 @@ class ChartSpec(BaseModel):
     aggregation_reasoning: str
     order: int
     width: Literal["full", "half"]
+    chart_score: Optional[int] = None
+    score_reasons: Optional[List[str]] = None
     data: Optional[ChartData] = None
     tab_id: Optional[str] = None
     created_at: str
