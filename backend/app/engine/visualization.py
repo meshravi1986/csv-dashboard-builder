@@ -315,6 +315,7 @@ def layout_dashboard(chart_specs: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
     non_kpis = [s for s in chart_specs if s.get("chart_type") != "kpi"]
 
     non_kpis.sort(key=lambda s: (s["layout_priority"], -(s.get("chart_score", 50) or 50)))
+    non_kpis = non_kpis[:6]
 
     interleaved: List[Dict[str, Any]] = []
     for priority in range(2, 5):
