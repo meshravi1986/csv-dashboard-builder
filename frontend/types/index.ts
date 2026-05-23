@@ -74,6 +74,7 @@ export interface ChartSpec {
   formula?: string;
   chart_score?: number;
   score_reasons?: string[];
+  suppression_reason?: string;
   data?: {
     labels: string[];
     values: (number | { x: number; y: number })[];

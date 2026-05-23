@@ -1,4 +1,4 @@
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Tuple
 import json
 import duckdb
 from app.utils.duckdb import get_duckdb
@@ -178,6 +178,90 @@ def generate_chart_specs(
         spec["order"] = i
 
     return specs
+
+
+def suppress_charts(
+    chart_specs: List[Dict[str, Any]],
+    all_chart_data: List[Dict[str, Any]],
+    profile: Optional[Dict[str, Any]],
+    row_count: int,
+) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
+    profile_map = _build_profile_map(profile)
+    seen_insights: set = set()
+    kept_specs: List[Dict[str, Any]] = []
+    kept_data: List[Dict[str, Any]] = []
+
+    for spec, data in zip(chart_specs, all_chart_data):
+        reasons: List[str] = []
+        y_field = spec.get("y_field", "")
+        x_field = spec.get("x_field", "")
+        chart_type = spec.get("chart_type", "")
+        labels = data.get("labels", [])
+        values = data.get("values", [])
+
+        # Rule 1: pie chart with >6 categories
+        if chart_type == "pie" and len(labels) > 6:
+            reasons.append(f"Pie chart has {len(labels)} categories (>6)")
+
+        # Rule 2: label count >50
+        if len(labels) > 50:
+            reasons.append(f"Chart has {len(labels)} labels (>50)")
+
+        # Rule 3: variance too low (near-constant values)
+        if chart_type != "kpi" and values:
+            nums = [v for v in values if isinstance(v, (int, float))]
+            if len(nums) > 1:
+                mean = sum(nums) / len(nums)
+                if mean != 0:
+                    var = sum((v - mean) ** 2 for v in nums) / len(nums)
+                    cv = (var ** 0.5) / abs(mean)
+                    if cv < 0.05:
+                        reasons.append(f"Very low variance (cv={cv:.3f})")
+
+        # Rule 4: y-field null % >70%
+        if y_field:
+            yp = profile_map.get(y_field)
+            if yp and yp.get("null_percent", 0) > 0.7:
+                reasons.append(f"Y-field has {yp['null_percent']*100:.0f}% nulls (>70%)")
+
+        # Rule 5: x-field dimension cardinality too high
+        if x_field and chart_type in ("bar", "line", "pie"):
+            xp = profile_map.get(x_field)
+            if xp:
+                card = xp.get("cardinality", 0)
+                if card > 0 and card / max(row_count, 1) > 0.3:
+                    reasons.append(f"Dimension cardinality {card}/{row_count} is too high")
+
+        # Rule 6: measure has mostly zero values
+        if chart_type != "kpi" and values:
+            nums = [v for v in values if isinstance(v, (int, float))]
+            if nums:
+                zero_frac = sum(1 for v in nums if v == 0) / len(nums)
+                if zero_frac > 0.8:
+                    reasons.append(f"{sum(1 for v in nums if v == 0)}/{len(nums)} values are zero (>80%)")
+
+        # Rule 7: duplicate insight
+        if chart_type == "scatter":
+            key = ("scatter", x_field, y_field)
+        elif chart_type == "kpi":
+            key = ("kpi", y_field)
+        else:
+            key = (chart_type, x_field, y_field, spec.get("aggregation"))
+        if key in seen_insights:
+            reasons.append("Duplicate insight (same x/y/agg as another chart)")
+        seen_insights.add(key)
+
+        if reasons:
+            spec["suppression_reason"] = "; ".join(reasons)
+        else:
+            kept_specs.append(spec)
+            kept_data.append(data)
+
+    if len(kept_specs) < len(chart_specs):
+        for i, spec in enumerate(kept_specs):
+            spec["order"] = i
+
+    return kept_specs, kept_data
 
 
 def generate_dashboard_title(

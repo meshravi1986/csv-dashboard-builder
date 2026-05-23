@@ -5,7 +5,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 from app.config import settings
 from app.prompts.chart import CHART_TITLE_PROMPT, DASHBOARD_COMPOSITION_PROMPT
-from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch
+from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch, suppress_charts
 from app.engine.profiling import profile_dataset
 
 _has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
@@ -151,6 +151,13 @@ def build_dashboard(
 
     charts = []
     all_chart_data = query_chart_data_batch(chart_specs, parquet_path) if parquet_path else [{"labels": [], "values": []} for _ in chart_specs]
+
+    chart_specs, all_chart_data = suppress_charts(chart_specs, all_chart_data, profile, row_count=profile.get("row_count", 0) if profile else 0)
+
+    if not chart_specs:
+        chart_specs = [{"chart_type": "kpi", "x_field": "", "y_field": "", "aggregation": "COUNT", "x_role": "dimension", "y_role": "measure", "order": 0, "width": "half", "title": "No Data", "semantic_reasoning": "", "chart_reasoning": "", "aggregation_reasoning": "", "formula": None}]
+        all_chart_data = [{"labels": [], "values": [0]}]
+
     for i, spec in enumerate(chart_specs):
         chart_id = str(uuid.uuid4())
         chart_data = all_chart_data[i] if i < len(all_chart_data) else {"labels": [], "values": []}

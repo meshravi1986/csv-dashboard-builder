@@ -122,6 +122,7 @@ class ChartSpec(BaseModel):
     width: Literal["full", "half"]
     chart_score: Optional[int] = None
     score_reasons: Optional[List[str]] = None
+    suppression_reason: Optional[str] = None
     data: Optional[ChartData] = None
     tab_id: Optional[str] = None
     created_at: str
