@@ -17,6 +17,7 @@ from app.api.dashboards import get_dataset
 from app.engine.profiling import profile_dataset
 from app.services.upload import get_parquet_path
 from app.services.semantic import get_ai_semantic_suggestions
+from app.engine.semantic_inference import infer_semantic_tags
 from app.utils.duckdb import get_duckdb
 import json
 import re
@@ -64,12 +65,33 @@ def suggest_semantics(
 
     ai_suggestions = get_ai_semantic_suggestions(profile, dataset_id=dataset_id)
 
+    row_count = profile.get("row_count", 0)
     fields = []
     for field in profile["fields"]:
+        inference = infer_semantic_tags(
+            field_name=field["field_name"],
+            sample_values=field.get("sample_values", []),
+            detected_type=field["detected_type"],
+            cardinality=field.get("cardinality", 0),
+            row_count=row_count,
+        )
+
+        role = inference.get("suggested_role") or (
+            "measure" if field["detected_type"] == "numeric"
+            else "date" if field["detected_type"] == "date"
+            else "dimension"
+        )
+        agg = inference.get("suggested_aggregation") or (
+            "SUM" if field["detected_type"] == "numeric" else None
+        )
+        fmt = inference.get("suggested_formatting")
+
         sf = SemanticField(
             field_name=field["field_name"],
-            role="measure" if field["detected_type"] == "numeric" else "date" if field["detected_type"] == "date" else "dimension",
-            aggregation="SUM" if field["detected_type"] == "numeric" else None,
+            role=role,
+            aggregation=agg,
+            formatting=fmt,
+            semantic_tags=inference.get("semantic_tags", []),
         )
         if ai_suggestions:
             match = next((s for s in ai_suggestions if s.get("field_name") == field["field_name"]), None)

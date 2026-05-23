@@ -61,8 +61,10 @@ export default function SemanticPage() {
             aggregation:
               suggestion?.aggregation ||
               (f.detected_type === "numeric" ? "SUM" : null),
+            formatting: suggestion?.formatting,
             suggested_role: suggestion?.role || null,
             suggested_aggregation: suggestion?.aggregation || null,
+            semantic_tags: suggestion?.semantic_tags || [],
           };
         });
         setFields(initialFields);
@@ -135,6 +137,9 @@ export default function SemanticPage() {
                   Aggregation
                 </th>
                 <th className="text-left px-4 py-3 text-xs text-slate-400 font-medium uppercase tracking-wider">
+                  Tags
+                </th>
+                <th className="text-left px-4 py-3 text-xs text-slate-400 font-medium uppercase tracking-wider">
                   Format
                 </th>
               </tr>
@@ -198,6 +203,18 @@ export default function SemanticPage() {
                     ) : (
                       <span className="text-slate-400 text-xs">--</span>
                     )}
+                  </td>
+                  <td className="px-4 py-3">
+                    <div className="flex flex-wrap gap-1">
+                      {(field.semantic_tags || []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-medium bg-slate-100 text-slate-600"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
                   </td>
                   <td className="px-4 py-3">
                     <select

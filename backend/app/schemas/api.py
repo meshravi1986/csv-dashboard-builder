@@ -44,6 +44,7 @@ class SemanticField(BaseModel):
     description: Optional[str] = None
     suggested_role: Optional[Literal["dimension", "measure", "date"]] = None
     suggested_aggregation: Optional[AGGREGATION_TYPES] = None
+    semantic_tags: List[str] = []
 
 
 class SemanticUpdateRequest(BaseModel):

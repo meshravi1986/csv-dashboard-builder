@@ -41,6 +41,7 @@ export interface SemanticField {
   description?: string;
   suggested_role?: "dimension" | "measure" | "date" | null;
   suggested_aggregation?: "SUM" | "AVG" | "COUNT" | "MIN" | "MAX" | "COUNT_DISTINCT" | null;
+  semantic_tags?: string[];
 }
 
 export interface Metric {
