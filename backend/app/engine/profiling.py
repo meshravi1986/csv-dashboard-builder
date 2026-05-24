@@ -1,8 +1,7 @@
-import polars as pl
 import threading
 from collections import OrderedDict
-from typing import Any, Dict, List, Optional
-from app.utils.duckdb import get_profile_stats
+from typing import Any, Dict, Optional
+from app.utils.duckdb import get_profile_stats, get_duckdb
 
 _cache_maxsize = 50
 _profile_cache: OrderedDict[str, Dict[str, Any]] = OrderedDict()
@@ -79,6 +78,5 @@ def clear_profile_cache(dataset_id: str):
 
 
 def count_rows(parquet_path: str) -> int:
-    from app.utils.duckdb import get_duckdb
     with get_duckdb() as conn:
         return conn.execute("SELECT COUNT(*) FROM read_parquet(?)", [parquet_path]).fetchone()[0]

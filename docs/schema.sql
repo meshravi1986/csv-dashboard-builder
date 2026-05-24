@@ -25,7 +25,7 @@ CREATE TABLE IF NOT EXISTS semantic_fields (
     dataset_id UUID NOT NULL REFERENCES datasets(id) ON DELETE CASCADE,
     field_name TEXT NOT NULL,
     role TEXT NOT NULL CHECK (role IN ('dimension', 'measure', 'date')),
-    aggregation TEXT CHECK (aggregation IN ('SUM', 'AVG', 'COUNT')),
+    aggregation TEXT CHECK (aggregation IN ('SUM', 'AVG', 'COUNT', 'MIN', 'MAX', 'COUNT_DISTINCT')),
     formatting TEXT,
     description TEXT,
     created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),

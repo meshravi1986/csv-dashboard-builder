@@ -103,12 +103,12 @@ Compatibility checked via DuckDB DESCRIBE on the target parquet file.
 - **ECharts**: Rich charting library
 - **@dnd-kit**: Drag-and-drop chart reordering
 - **Supabase**: Auth, storage, and database
-- **OpenAI**: Optional AI enhancement (titles, suggestions, metric SQL)
+- **OpenAI**: Optional AI enhancement (titles, suggestions, metric SQL); single shared client instance at `app/utils/openai_client.py`
 
 ## Security
 
 ### SQL Injection Prevention
-All filter values use DuckDB positional parameters (`$1, $2, ...`) exclusively. Column names are validated and escaped via `safe_quote_ident()`. The raw SQL execution endpoint has been removed entirely. Dangerous DuckDB functions (`read_text`, `read_blob`, `read_file`, `glob`, `write_text`, etc.) are blocklisted.
+All filter values use DuckDB positional parameters (`$1, $2, ...`) exclusively. Column names are validated and escaped via `safe_quote_ident()`. The raw SQL execution endpoint has been removed entirely. The `preview_metric_sql` endpoint only accepts scalar expressions wrapped in a parameterized `SELECT ... FROM read_parquet(?)` — raw user SELECTs are never executed directly. Dangerous DuckDB functions (`read_text`, `read_blob`, `read_file`, `glob`, `write_text`, etc.) are blocklisted as defense-in-depth.
 
 ### Database Access
 - `get_supabase()` uses `SUPABASE_LIMITED_KEY` (falls back to `SUPABASE_SERVICE_KEY`)

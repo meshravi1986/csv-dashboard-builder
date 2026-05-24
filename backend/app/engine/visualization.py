@@ -1,9 +1,14 @@
-import re
 from typing import Any, Dict, List, Optional, Tuple
 import duckdb
 from app.utils.duckdb import get_duckdb, safe_quote_ident
 from app.engine.scoring import score_chart_combination
 
+
+_MAX_FILTER_CARDINALITY = 500
+_MAX_FILTER_SUGGESTIONS = 15
+_MAX_PIE_CATEGORIES = 20
+_MAX_BAR_LABELS = 50
+_MAX_SCATTER_POINTS = 1000
 
 DETERMINISTIC_CHART_RULES = {
     ("date", "measure"): "line",
@@ -415,14 +420,6 @@ def query_chart_data_batch(chart_specs: List[Dict[str, Any]], parquet_path: str,
         return [_query_chart_data_with_conn(spec, parquet_path, filters, conn) for spec in chart_specs]
 
 
-_FORMULA_COL_RE = re.compile(r'"(?:[^"]|"")+"')
-
-
-def _extract_formula_columns(formula: str) -> List[str]:
-    """Extract column names from a formula expression for validation."""
-    return [m.strip('"') for m in _FORMULA_COL_RE.findall(formula)]
-
-
 def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, filters: Optional[Dict[str, Any]], conn: duckdb.DuckDBPyConnection) -> Dict[str, Any]:
     x_field = chart_spec["x_field"]
     y_field = chart_spec["y_field"]
@@ -471,7 +468,7 @@ def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, f
             return {"labels": [], "values": [val]}
 
         if chart_type == "pie":
-            sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT 20"
+            sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT {_MAX_PIE_CATEGORIES}"
             params.extend(filter_params)
             result = conn.execute(sql, params).fetchall()
             return {
@@ -481,7 +478,7 @@ def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, f
 
         if chart_type == "scatter":
             rex = raw_expr()
-            sql = f"SELECT {quoted_x} as x, {rex} as y FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL AND {rex} IS NOT NULL{filter_sql} LIMIT 1000"
+            sql = f"SELECT {quoted_x} as x, {rex} as y FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL AND {rex} IS NOT NULL{filter_sql} LIMIT {_MAX_SCATTER_POINTS}"
             params.extend(filter_params)
             result = conn.execute(sql, params).fetchall()
             return {
@@ -489,7 +486,7 @@ def _query_chart_data_with_conn(chart_spec: Dict[str, Any], parquet_path: str, f
                 "values": [{"x": r[0], "y": r[1]} for r in result],
             }
 
-        sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT 50"
+        sql = f"SELECT {quoted_x} as label, {value_expr()} as value FROM read_parquet($1) WHERE {quoted_x} IS NOT NULL{filter_sql} GROUP BY {quoted_x} ORDER BY value DESC LIMIT {_MAX_BAR_LABELS}"
         params.extend(filter_params)
         result = conn.execute(sql, params).fetchall()
         return {

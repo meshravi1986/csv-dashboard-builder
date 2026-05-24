@@ -1,11 +1,7 @@
 import json
 from typing import Optional
-from openai import OpenAI
-from app.config import settings
+from app.utils.openai_client import client
 from app.prompts.semantic import SEMANTIC_SUGGESTION_PROMPT
-
-_has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
-client = OpenAI(api_key=settings.openai_api_key, timeout=10.0) if _has_valid_key else None
 
 _ai_cache: dict[str, Optional[list]] = {}
 

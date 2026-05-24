@@ -116,12 +116,12 @@ def update_semantics(
     if existing.data:
         supabase.table("semantic_fields").delete().eq("dataset_id", dataset_id).execute()
 
-    # Supabase CHECK constraint only allows SUM, AVG, COUNT
-    _ALLOWED_AGG = {"SUM", "AVG", "COUNT"}
+    # Matches semantic_fields.aggregation CHECK constraint in schema.sql
+    _ALLOWED_AGG = {"SUM", "AVG", "COUNT", "MIN", "MAX", "COUNT_DISTINCT"}
 
     def _safe_aggregation(agg: str | None) -> str | None:
         if agg is not None and agg not in _ALLOWED_AGG:
-            return "COUNT"
+            return "SUM"
         return agg
 
     now = datetime.utcnow().isoformat()
@@ -170,27 +170,20 @@ def preview_metric_sql(
     dataset = get_dataset(dataset_id, user["id"])
     parquet_path = get_parquet_path(dataset["parquet_path"])
 
-    _DANGEROUS = ["CREATE", "DROP", "ALTER", "INSERT", "UPDATE", "DELETE",
-                  "ATTACH", "DETACH", "INSTALL", "LOAD", "PRAGMA", "SET",
-                  "read_text", "read_blob", "read_file", "glob",
-                  "write_text", "write_csv", "write_parquet"]
+    _DANGEROUS_FUNCTIONS = ["read_text", "read_blob", "read_file", "glob",
+                            "write_text", "write_csv", "write_parquet"]
 
     try:
         with get_duckdb() as conn:
-            sql = request.sql.strip()
-            for kw in _DANGEROUS:
-                if kw in sql.upper() and kw not in ("SELECT",):
-                    raise ValueError(f"Disallowed SQL keyword: {kw}")
-                if kw in ("read_text", "read_blob", "read_file", "glob",
-                          "write_text", "write_csv", "write_parquet"):
-                    if kw in sql.lower():
-                        raise ValueError(f"Disallowed SQL function: {kw}")
+            sql = request.sql.strip().rstrip(";")
 
-            if sql.upper().startswith("SELECT"):
-                result = conn.execute(sql).fetchone()
-            else:
-                safe_sql = f"SELECT {sql} as value FROM read_parquet(?)"
-                result = conn.execute(safe_sql, [parquet_path]).fetchone()
+            lower = sql.lower()
+            for fn in _DANGEROUS_FUNCTIONS:
+                if fn in lower:
+                    raise ValueError(f"Disallowed SQL function: {fn}")
+
+            safe_sql = f"SELECT ({sql}) as value FROM read_parquet(?)"
+            result = conn.execute(safe_sql, [parquet_path]).fetchone()
             val = float(result[0]) if result and result[0] is not None else None
             return {"value": val, "error": None}
     except Exception as e:

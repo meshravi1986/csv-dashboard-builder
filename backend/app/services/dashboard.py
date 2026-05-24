@@ -2,14 +2,11 @@ import json
 import uuid
 from datetime import datetime
 from typing import Any, Dict, List, Optional
-from openai import OpenAI
 from app.config import settings
+from app.utils.openai_client import client
 from app.prompts.chart import CHART_TITLE_PROMPT, DASHBOARD_COMPOSITION_PROMPT
 from app.engine.visualization import generate_chart_specs, generate_dashboard_title, query_chart_data, query_chart_data_batch, suppress_charts, layout_dashboard
 from app.engine.profiling import profile_dataset
-
-_has_valid_key = settings.openai_api_key and not settings.openai_api_key.startswith("your_")
-client = OpenAI(api_key=settings.openai_api_key, timeout=10.0) if _has_valid_key else None
 
 
 def get_ai_chart_titles(chart_specs: List[Dict[str, Any]]) -> Optional[List[Dict[str, Any]]]:

@@ -144,10 +144,6 @@ class DashboardResponse(BaseModel):
     updated_at: str
 
 
-class DashboardListResponse(BaseModel):
-    dashboards: List[DashboardResponse]
-
-
 class DashboardUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
@@ -159,18 +155,6 @@ class VersionCreateRequest(BaseModel):
     new_dataset_id: str
     refresh_frequency: str = "Adhoc"
     tag: str = ""
-
-class ColumnMatchResult(BaseModel):
-    matches: list[dict]
-
-class VersionInfo(BaseModel):
-    id: str
-    version_number: int
-    tag: Optional[str] = None
-    title: str
-    created_at: str
-    charts_count: int
-
 
 class SuggestSQLRequest(BaseModel):
     description: str

@@ -102,34 +102,9 @@ async def process_upload(file: UploadFile, user_id: str) -> dict:
         column_match = None
         try:
             current_cols = set(c.lower() for c in df.columns)
-            existing_dashboards = supabase.table("dashboards").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
-            seen_datasets = set()
-            for d in existing_dashboards.data:
-                ds_id = d.get("dataset_id")
-                if not ds_id or ds_id in seen_datasets:
-                    continue
-                seen_datasets.add(ds_id)
-                other_cols = get_dataset_columns(ds_id, supabase)
-                if other_cols is None:
-                    continue
-                if current_cols == other_cols:
-                    ds_name = ""
-                    try:
-                        ds_result = supabase.table("datasets").select("name").eq("id", ds_id).execute()
-                        if ds_result.data:
-                            ds_name = ds_result.data[0].get("name", "")
-                    except Exception:
-                        pass
-                    vgid = d.get("version_group_id") or d["id"]
-                    column_match = {
-                        "dashboard_id": d["id"],
-                        "dashboard_title": d["title"],
-                        "dataset_id": ds_id,
-                        "dataset_name": ds_name,
-                        "version_group_id": vgid,
-                        "version_number": d.get("version_number") or 1,
-                    }
-                    break
+            matches = find_matching_dashboards(current_cols, user_id, supabase)
+            if matches:
+                column_match = matches[0]
         except Exception:
             pass
 
@@ -176,6 +151,46 @@ def get_parquet_path(parquet_storage_path: str) -> str:
                 temp_path.unlink()
             raise HTTPException(status_code=500, detail=f"Failed to load dataset: {str(e)}")
     return str(temp_path)
+
+
+def find_matching_dashboards(
+    columns: set,
+    user_id: str,
+    supabase,
+    exclude_dataset_id: Optional[str] = None,
+) -> list[dict]:
+    existing_dashboards = supabase.table("dashboards").select("*").eq("user_id", user_id).order("created_at", desc=True).execute()
+    matches = []
+    seen_datasets = set()
+    for d in existing_dashboards.data:
+        ds_id = d.get("dataset_id")
+        if not ds_id or ds_id == exclude_dataset_id or ds_id in seen_datasets:
+            continue
+        seen_datasets.add(ds_id)
+        try:
+            other_cols = get_dataset_columns(ds_id, supabase)
+            if other_cols is None:
+                continue
+            if columns == other_cols:
+                ds_name = ""
+                try:
+                    ds_result = supabase.table("datasets").select("name").eq("id", ds_id).execute()
+                    if ds_result.data:
+                        ds_name = ds_result.data[0].get("name", "")
+                except Exception:
+                    pass
+                vgid = d.get("version_group_id") or d["id"]
+                matches.append({
+                    "dashboard_id": d["id"],
+                    "dashboard_title": d["title"],
+                    "dataset_id": ds_id,
+                    "dataset_name": ds_name,
+                    "version_group_id": vgid,
+                    "version_number": d.get("version_number") or 1,
+                })
+        except Exception:
+            continue
+    return matches
 
 
 def get_dataset_columns(dataset_id: str, supabase) -> Optional[set]:

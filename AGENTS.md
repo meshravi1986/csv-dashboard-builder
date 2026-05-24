@@ -8,6 +8,50 @@ Harden SQL injection surfaces, improve performance, remove dead code, fix bugs, 
 ### Security Hardening
 - **`_build_filter_sql()` returns `tuple[str, list]`**: All filter values use DuckDB positional parameters (`$1, $2, ...`) instead of raw string interpolation. 4 callers updated.
 - **`read_parquet(?)` everywhere**: Parquet file paths parameterized in all queries — prevents path injection.
+
+# Session Summary — 2026-05-24
+
+## Goal
+Fix remaining security gaps, remove dead code, eliminate duplication, improve performance, and clean up magic numbers.
+
+## Changes
+
+### Security
+- **`preview_metric_sql`**: Removed raw SELECT execution path — now always wraps user expressions in parameterized `SELECT (...) as value FROM read_parquet(?)`. Dangerous function blocklist kept as defense-in-depth.
+- **`_ALLOWED_AGG`**: Expanded from `{SUM, AVG, COUNT}` to all 6 types including `MIN, MAX, COUNT_DISTINCT`; updated `semantic_fields.aggregation` CHECK constraint in `docs/schema.sql` to match `metrics` table.
+
+### Dead Code Removal
+- **`backend/app/api/query.py`**: Deleted entire file (empty router stub, no routes registered).
+- **Unused schemas**: Removed `DashboardListResponse`, `ColumnMatchResult`, `VersionInfo` from `schemas/api.py`.
+- **`_extract_formula_columns()`**: Removed dead function from `visualization.py`.
+- **Unused imports**: Removed `import polars as pl` from `profiling.py`, `import re` from `visualization.py`.
+- **Function-local import**: Moved `from app.utils.duckdb import get_duckdb` inside `count_rows()` to top-level import.
+
+### Duplication Cleanup
+- **`_post_json` closures**: Extracted duplicate inline closures in `generate_dashboard()` and `create_dashboard_version()` into shared module-level `_supabase_post()` helper.
+- **Column-match logic**: Extracted shared `find_matching_dashboards()` into `services/upload.py`; both `process_upload()` and `check_column_match()` call it.
+- **OpenAI client**: Created `app/utils/openai_client.py` — single shared `OpenAI()` instance; `services/dashboard.py`, `services/semantic.py`, `services/metric_sql.py` all import from it.
+
+### Performance
+- **`update_dashboard()`**: Replaced N individual `chart_specs.insert()` calls with a single batch insert.
+
+### Code Quality
+- **Magic numbers**: Extracted `_MAX_FILTER_CARDINALITY=500`, `_MAX_FILTER_SUGGESTIONS=15`, `_MAX_PIE_CATEGORIES=20`, `_MAX_BAR_LABELS=50`, `_MAX_SCATTER_POINTS=1000` as named constants.
+
+### Files Changed
+- `backend/app/api/dashboards.py` — _supabase_post helper, _post_json removed, batch chart inserts, magic number constants, shared find_matching_dashboards call
+- `backend/app/api/datasets.py` — preview_metric_sql security fix, _ALLOWED_AGG expanded
+- `backend/app/api/query.py` — deleted
+- `backend/app/engine/visualization.py` — _extract_formula_columns removed, unused re import removed, magic number constants
+- `backend/app/engine/profiling.py` — unused polars import removed, get_duckdb import moved to top
+- `backend/app/schemas/api.py` — DashboardListResponse, ColumnMatchResult, VersionInfo removed
+- `backend/app/services/dashboard.py` — imports shared openai_client
+- `backend/app/services/semantic.py` — imports shared openai_client
+- `backend/app/services/metric_sql.py` — imports shared openai_client
+- `backend/app/services/upload.py` — find_matching_dashboards helper added
+- `backend/app/utils/openai_client.py` — new file, shared OpenAI client instance
+- `docs/schema.sql` — semantic_fields.aggregation CHECK constraint expanded
+- `docs/architecture.md` — updated SQL injection prevention docs, shared OpenAI client note
 - **`safe_quote_ident()` validated column names**: Regex `_COLUMN_NAME_RE` limits to alphanumeric/underscore/space/dot/dash; embedded double-quotes escaped.
 - **`_safe_quote_ident` typo fixed → `safe_quote_ident`**: NameError in `metrics.py` fixed (then whole function removed as dead code).
 - **`resp.text` leaks removed**: `dashboards.py` lines 810, 919 no longer expose Supabase error details to client. Log lines 129, 301 also sanitized.
