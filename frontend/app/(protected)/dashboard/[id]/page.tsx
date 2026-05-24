@@ -239,9 +239,9 @@ export default function DashboardDetailPage() {
   const tabs = dashboard.tabs || [];
   const currentPalette = paletteOptions.find((p) => p.value === (dashboard.color_scheme || "slate")) || paletteOptions[0];
 
-  const filteredCharts = activeTabId
+  const filteredCharts = activeTabId && dashboard.charts
     ? dashboard.charts.filter((c: any) => c.tab_id === activeTabId)
-    : dashboard.charts;
+    : (dashboard.charts || []);
 
   return (
     <>

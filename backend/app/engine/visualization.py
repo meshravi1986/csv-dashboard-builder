@@ -379,7 +379,7 @@ def _build_filter_sql(filters: Optional[Dict[str, Any]] = None) -> tuple[str, li
         return "", []
     conditions = []
     params: list = []
-    param_idx = 1
+    param_idx = 2  # $1 is reserved for read_parquet(?) in all callers
     for field_name, fdef in filters.items():
         q_field = safe_quote_ident(field_name)
         if fdef.get("type") == "dimension" and fdef.get("values"):
