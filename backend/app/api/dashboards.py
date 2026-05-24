@@ -125,10 +125,13 @@ def generate_dashboard(
     headers = _rest_headers()
 
     if dashboard_id:
-        # Regenerate in-place: verify dashboard exists, delete old charts, reuse dashboard_id
+        # Regenerate in-place: verify dashboard exists, reuse dashboard_id
         dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
         if not dash_result.data:
             raise HTTPException(status_code=404, detail="Dashboard not found")
+        # Preserve manually added charts (chart_reasoning == "Manually added by user")
+        existing_charts = supabase.table("chart_specs").select("*").eq("dashboard_id", dashboard_id).execute()
+        manual_charts = [c for c in (existing_charts.data or []) if c.get("chart_reasoning") == "Manually added by user"]
         supabase.table("chart_specs").delete().eq("dashboard_id", dashboard_id).execute()
         supabase.table("dashboard_tabs").delete().eq("dashboard_id", dashboard_id).execute()
         db_dashboard_id = dashboard_id
@@ -203,6 +206,37 @@ def generate_dashboard(
         })
     if chart_payloads:
         _supabase_post(f"{SUPABASE_REST_URL}/chart_specs", chart_payloads, "Chart batch insert", headers)
+
+    # Re-insert manually added charts preserved from regeneration
+    if dashboard_id and manual_charts:
+        new_tabs = dashboard.get("tabs", [])
+        first_tab_id = new_tabs[0]["id"] if new_tabs else None
+        next_order = max((c["order"] for c in dashboard["charts"]), default=0) + 1
+        manual_payloads = []
+        for mc in manual_charts:
+            manual_payloads.append({
+                "id": mc["id"],
+                "dashboard_id": db_dashboard_id,
+                "chart_type": mc["chart_type"],
+                "title": mc["title"],
+                "x_field": mc["x_field"],
+                "y_field": mc["y_field"],
+                "aggregation": mc["aggregation"],
+                "formula": mc.get("formula"),
+                "x_role": mc["x_role"],
+                "y_role": mc["y_role"],
+                "width": mc["width"],
+                "order": next_order,
+                "semantic_reasoning": mc.get("semantic_reasoning", "User-added chart"),
+                "chart_reasoning": mc.get("chart_reasoning", "Manually added by user"),
+                "aggregation_reasoning": mc.get("aggregation_reasoning", ""),
+                "tab_id": first_tab_id,
+                "created_at": now,
+                "updated_at": now,
+            })
+            next_order += 1
+        if manual_payloads:
+            _supabase_post(f"{SUPABASE_REST_URL}/chart_specs", manual_payloads, "Manual chart re-insert", headers)
 
     dashboard["id"] = db_dashboard_id
     if has_versioning:
