@@ -138,5 +138,30 @@ Fix remaining security gaps, remove dead code, eliminate duplication, improve pe
 - `frontend/lib/supabase.ts` — Cleanup unused wrappers
 - `frontend/lib/utils.ts` — Removed unused functions
 - `frontend/package.json` — dnd-kit version pinned
-- `frontend/services/api.ts` — _dedup, _request, _dedupRequest helpers
+- `frontend/services/api.ts` — _dedup, _request, _dedupRequest helpers, regenerateDashboard method
 - `frontend/types/index.ts` — Removed unused types, added Tab
+
+# Session Summary — 2026-05-24 (Session 2)
+
+## Goal
+Fix data loss when navigating from dashboard through edit semantics/metrics and back; ensure filter workflow is visible on generated dashboards.
+
+## Bug Fix
+**Data loss on round-trip**: When a user on a generated dashboard clicked "Edit Semantics" → "Confirm Semantics" → redirected to Metrics → "Generate Dashboard", the backend deleted the old dashboard and created a brand new one. This destroyed all original changes (charts, color scheme, filter state).
+
+## Fix
+- **`dashboard_id` propagated through navigation**: Dashboard page now passes `&dashboard_id=X` to both "Edit Semantics" and "Edit Metrics" links
+- **Semantic page**: Accepts `dashboard_id`, preserves it in redirect to metrics page, shows "← Back to Dashboard" button
+- **Metrics page**: Accepts `dashboard_id`, shows "← Back to Dashboard" button, "Generate Dashboard" becomes "Regenerate Dashboard" when `dashboard_id` is present
+- **Backend `generate_dashboard()`**: Accepts optional `dashboard_id` query param — when provided, regenerates charts in-place (deletes old chart_specs/tabs, generates new ones under same dashboard ID) instead of deleting the dashboard row and creating a new one
+- **`regenerateDashboard()` API method**: Frontend calls `POST .../generate?dashboard_id=X` for in-place regeneration
+
+## Filter Workflow
+The `FilterBar` component and `suggest_filters` endpoint were already correctly implemented. Filters render when the dataset has dimension/date semantic fields with cardinality ≤ 500. The previous "missing filters" issue was a symptom of the data-loss bug — user was on a new dashboard, not their original one.
+
+## Files Changed
+- `backend/app/api/dashboards.py` — generate_dashboard accepts optional `dashboard_id` query param for in-place regeneration
+- `frontend/app/(protected)/dashboard/[id]/page.tsx` — passes `dashboard_id` to semantics/metrics links
+- `frontend/app/(protected)/semantic/page.tsx` — accepts `dashboard_id`, preserves in redirect, back button
+- `frontend/app/(protected)/metrics/page.tsx` — accepts `dashboard_id`, back button, regenerate vs generate
+- `frontend/services/api.ts` — added `regenerateDashboard()` method
