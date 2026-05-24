@@ -12,6 +12,7 @@ export default function MetricsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const datasetId = searchParams.get("dataset_id");
+  const dashboardId = searchParams.get("dashboard_id");
   const [metrics, setMetrics] = useState<Metric[]>([]);
   const [availableFields, setAvailableFields] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
@@ -251,9 +252,19 @@ export default function MetricsPage() {
     }
   };
 
-  const handleGenerate = () => {
+  const handleGenerate = async () => {
     if (!datasetId) return;
-    router.push(`/dashboard?dataset_id=${datasetId}`);
+    if (dashboardId) {
+      try {
+        await api.regenerateDashboard(datasetId, dashboardId);
+        router.push(`/dashboard/${dashboardId}`);
+      } catch (err: any) {
+        console.error(err);
+        alert("Failed to regenerate dashboard: " + (err.message || "Unknown error"));
+      }
+    } else {
+      router.push(`/dashboard?dataset_id=${datasetId}`);
+    }
   };
 
   if (loading) {
@@ -287,12 +298,20 @@ export default function MetricsPage() {
           >
             {loadingAvailable ? "Loading..." : "Select Metrics"}
           </button>
+          {dashboardId && (
+            <button onClick={() => router.push(`/dashboard/${dashboardId}`)} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5">
+              <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+              </svg>
+              Back to Dashboard
+            </button>
+          )}
           <button
             onClick={handleGenerate}
             disabled={metrics.length === 0}
             className="px-4 py-2 bg-slate-900 text-white text-sm font-medium rounded-lg hover:bg-slate-800 transition-colors disabled:opacity-50"
           >
-            Generate Dashboard
+            {dashboardId ? "Regenerate Dashboard" : "Generate Dashboard"}
           </button>
         </div>
       </div>

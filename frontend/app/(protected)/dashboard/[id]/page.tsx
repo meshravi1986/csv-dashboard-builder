@@ -287,10 +287,10 @@ export default function DashboardDetailPage() {
             + Add Charts
           </button>
           <div className="w-px h-5 bg-slate-300/40" />
-          <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+          <button onClick={() => router.push(`/semantic?dataset_id=${dashboard.dataset_id}&dashboard_id=${params.id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
             Edit Semantics
           </button>
-          <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
+          <button onClick={() => router.push(`/metrics?dataset_id=${dashboard.dataset_id}&dashboard_id=${params.id}`)} className="px-3 py-1.5 border border-slate-200 bg-white text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors">
             Edit Metrics
           </button>
           <div className="w-px h-5 bg-slate-300/40" />

@@ -3,7 +3,8 @@ import json
 import re
 from datetime import datetime, timedelta
 import httpx
-from fastapi import APIRouter, Depends, HTTPException
+from typing import Optional
+from fastapi import APIRouter, Depends, HTTPException, Query
 from app.schemas.api import (
     DashboardResponse, DashboardUpdate, ChartCreateRequest,
     FilterSuggestResponse, DimensionFilterConfig, DateFilterConfig, DatePreset,
@@ -87,6 +88,7 @@ def _build_filters_dict(filters: list[ActiveFilter]) -> dict:
 @datasets_router.post("/{dataset_id}/dashboard/generate")
 def generate_dashboard(
     dataset_id: str,
+    dashboard_id: Optional[str] = Query(None),
     user: dict = Depends(get_current_user),
 ):
     import time as time_mod
@@ -119,37 +121,45 @@ def generate_dashboard(
     print(f"[generate_dashboard] Dashboard built ({len(dashboard['charts'])} charts) at {time_mod.time() - t0:.1f}s", flush=True)
 
     has_versioning = _has_versioning_columns(supabase)
-
-    # Delete existing dashboard for this dataset (non-versioned only)
-    existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).execute()
-    existing_data = existing.data or []
-    if existing_data:
-        if has_versioning:
-            existing_data = [d for d in existing_data if d.get("version_group_id") is None]
-        if existing_data:
-            for d in existing_data:
-                supabase.table("chart_specs").delete().eq("dashboard_id", d["id"]).execute()
-            supabase.table("dashboards").delete().eq("id", existing_data[0]["id"]).execute()
-
-    db_dashboard_id = str(uuid.uuid4())
     now = datetime.utcnow().isoformat()
-
     headers = _rest_headers()
 
-    dash_payload = {
-        "id": db_dashboard_id,
-        "user_id": user["id"],
-        "dataset_id": dataset_id,
-        "title": dashboard["title"],
-        "description": dashboard.get("description"),
-        "refresh_frequency": "Adhoc",
-        "created_at": now,
-        "updated_at": now,
-    }
-    if has_versioning:
-        dash_payload["version_group_id"] = db_dashboard_id
-        dash_payload["version_number"] = 1
-    _supabase_post(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert", headers)
+    if dashboard_id:
+        # Regenerate in-place: verify dashboard exists, delete old charts, reuse dashboard_id
+        dash_result = supabase.table("dashboards").select("*").eq("id", dashboard_id).eq("user_id", user["id"]).execute()
+        if not dash_result.data:
+            raise HTTPException(status_code=404, detail="Dashboard not found")
+        supabase.table("chart_specs").delete().eq("dashboard_id", dashboard_id).execute()
+        supabase.table("dashboard_tabs").delete().eq("dashboard_id", dashboard_id).execute()
+        db_dashboard_id = dashboard_id
+        supabase.table("dashboards").update({"title": dashboard["title"], "description": dashboard.get("description"), "updated_at": now}).eq("id", dashboard_id).execute()
+    else:
+        # Delete existing dashboard for this dataset (non-versioned only)
+        existing = supabase.table("dashboards").select("*").eq("dataset_id", dataset_id).execute()
+        existing_data = existing.data or []
+        if existing_data:
+            if has_versioning:
+                existing_data = [d for d in existing_data if d.get("version_group_id") is None]
+            if existing_data:
+                for d in existing_data:
+                    supabase.table("chart_specs").delete().eq("dashboard_id", d["id"]).execute()
+                supabase.table("dashboards").delete().eq("id", existing_data[0]["id"]).execute()
+
+        db_dashboard_id = str(uuid.uuid4())
+        dash_payload = {
+            "id": db_dashboard_id,
+            "user_id": user["id"],
+            "dataset_id": dataset_id,
+            "title": dashboard["title"],
+            "description": dashboard.get("description"),
+            "refresh_frequency": "Adhoc",
+            "created_at": now,
+            "updated_at": now,
+        }
+        if has_versioning:
+            dash_payload["version_group_id"] = db_dashboard_id
+            dash_payload["version_number"] = 1
+        _supabase_post(f"{SUPABASE_REST_URL}/dashboards", dash_payload, "Dashboard insert", headers)
 
     # Insert default tab
     tab_payloads = []

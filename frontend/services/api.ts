@@ -194,6 +194,16 @@ class ApiService {
     });
   }
 
+  async regenerateDashboard(datasetId: string, dashboardId: string) {
+    const headers = await _authHeaders();
+    const res = await this._fetch(`${this.baseUrl}/datasets/${datasetId}/dashboard/generate?dashboard_id=${dashboardId}`, { method: "POST", headers }, 120000);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({ detail: "Dashboard regeneration failed" }));
+      throw new Error(err.detail || "Dashboard regeneration failed");
+    }
+    return res.json();
+  }
+
   async getDashboards() {
     return this._request(`${this.baseUrl}/dashboards`, undefined, undefined, "Dashboards fetch failed");
   }

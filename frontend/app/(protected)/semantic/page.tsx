@@ -30,6 +30,7 @@ export default function SemanticPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const datasetId = searchParams.get("dataset_id");
+  const dashboardId = searchParams.get("dashboard_id");
   const [profile, setProfile] = useState<DatasetProfile | null>(null);
   const [fields, setFields] = useState<SemanticField[]>([]);
   const [suggestions, setSuggestions] = useState<SemanticField[] | null>(null);
@@ -89,7 +90,7 @@ export default function SemanticPage() {
     setSaving(true);
     try {
       await api.updateSemantics(datasetId, fields);
-      router.push(`/metrics?dataset_id=${datasetId}`);
+      router.push(`/metrics?dataset_id=${datasetId}${dashboardId ? `&dashboard_id=${dashboardId}` : ''}`);
     } catch (err: any) {
       setError(err.message);
     } finally {
@@ -115,6 +116,17 @@ export default function SemanticPage() {
           Review and confirm field roles. AI suggestions shown where available.
         </p>
       </div>
+
+      {dashboardId && (
+        <div className="flex items-center gap-3">
+          <button onClick={() => router.push(`/dashboard/${dashboardId}`)} className="px-3 py-1.5 border border-slate-200 text-sm font-medium rounded-lg hover:bg-slate-50 transition-colors flex items-center gap-1.5">
+            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back to Dashboard
+          </button>
+        </div>
+      )}
 
       {error && (
         <div className="bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-600">
