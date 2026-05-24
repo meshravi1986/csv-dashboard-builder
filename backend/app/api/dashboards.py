@@ -13,7 +13,7 @@ from app.schemas.api import (
 )
 from app.utils.auth import get_current_user
 from app.utils.supabase import get_supabase
-from app.utils.duckdb import get_duckdb
+from app.utils.duckdb import get_duckdb, safe_quote_ident
 from app.services.dashboard import build_dashboard
 from app.services.upload import get_parquet_path, get_dataset_columns, get_dataset, find_matching_dashboards
 from app.engine.visualization import query_chart_data, query_chart_data_batch
